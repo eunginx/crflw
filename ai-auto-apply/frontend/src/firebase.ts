@@ -17,5 +17,13 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Enable auth debugging in development
+if (process.env.NODE_ENV === 'development') {
+  (auth as any).settings = {
+    ...((auth as any).settings || {}),
+    appVerificationDisabledForTesting: true
+  };
+}
+
 export { auth, db };
 export default app;

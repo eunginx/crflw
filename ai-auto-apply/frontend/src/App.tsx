@@ -9,6 +9,7 @@ import ApplicationsPage from './pages/ApplicationsPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<HomePage />} />
               <Route path="jobs" element={<JobsPage />} />
