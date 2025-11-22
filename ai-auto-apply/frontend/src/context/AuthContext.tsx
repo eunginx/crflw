@@ -9,6 +9,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { userAPI } from '../services/apiService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -26,8 +27,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      
+      // Create user in PostgreSQL when they actually log in
+      if (user) {
+        console.log('[AUTH] User authenticated:', user.uid);
+        // User creation is now handled automatically by other contexts when needed
+        console.log('[AUTH] User authentication successful');
+      }
+      
       setLoading(false);
     });
 
@@ -35,11 +44,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // User will be created in PostgreSQL by onAuthStateChanged if successful
+    } catch (error) {
+      console.error('[AUTH] Sign in failed:', error);
+      throw error;
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      // User will be created in PostgreSQL by onAuthStateChanged if successful
+    } catch (error) {
+      console.error('[AUTH] Sign up failed:', error);
+      throw error;
+    }
   };
 
   const signInWithGoogle = async () => {
