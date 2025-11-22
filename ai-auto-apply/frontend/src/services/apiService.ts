@@ -1,11 +1,17 @@
-// Improved API base URL configuration
-const rawBase = process.env.REACT_APP_API_URL || "http://localhost:8000";
+// Programmatic API base URL configuration with environment detection
+const getApiBaseUrl = () => {
+  const env = process.env.REACT_APP_ENV || 'local';
+  const backendPort = process.env.REACT_APP_BACKEND_PORT || '6001';
+  
+  if (env === 'docker') {
+    return `http://localhost:8100/api`;
+  }
+  
+  return `http://localhost:${backendPort}/api`;
+};
 
-// Ensure the base URL always ends with /api
-const API_BASE_URL = rawBase.endsWith("/api")
-  ? rawBase
-  : `${rawBase.replace(/\/$/, "")}/api`;
-
+const API_BASE_URL = getApiBaseUrl();
+console.log("[API] Environment:", process.env.REACT_APP_ENV);
 console.log("[API] Using base URL:", API_BASE_URL);
 
 // Base API call function with improved error handling
