@@ -19,6 +19,7 @@ import NotFoundPage from './pages/NotFoundPage';
 // Email-based pages
 import EmailSettingsPage from './pages/EmailSettingsPage';
 import EmailIntegrationTest from './pages/EmailIntegrationTest';
+import AIApplyPage from './pages/AIApplyPage';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
                     <Route index element={<HomePage />} />
                     <Route path="jobs" element={<JobsPage />} />
                     <Route path="applications" element={<ApplicationsPage />} />
+                    <Route path="ai-apply" element={<AIApplyPage />} />
                     <Route path="profile" element={<ProfilePage />} />
                     <Route path="settings" element={
                       <AuthProvider>

@@ -14,6 +14,10 @@ const resumeRoutes = require('./routes/resumes');
 const settingsEmailRoutes = require('./routes/settings-email');
 const applicationsEmailRoutes = require('./routes/applications-email');
 const emailUserDataRoutes = require('./routes/email-user-data');
+const resumesEmailRoutes = require('./routes/resumes-email');
+const resumeProcessingRoutes = require('./routes/resumeProcessingRoutes');
+const firebaseMetadataRoutes = require('./routes/firebaseMetadataRoutes');
+const documentManagementRoutes = require('./routes/documentManagementRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -61,9 +65,19 @@ app.get('/api/email/test', (req, res) => {
 });
 
 app.use('/api/email', emailUserDataRoutes);
-app.use('/api/email', settingsEmailRoutes);
+app.use('/api/email/resumes', resumesEmailRoutes);
+app.use('/api/processing', resumeProcessingRoutes);
+app.use('/api/firebase', firebaseMetadataRoutes);
 app.use('/api/email', applicationsEmailRoutes);
 console.log('[DEBUG] All email routes registered');
+
+// Add a simple test route for document management
+app.get('/api/documents/test', (req, res) => {
+  res.json({ message: 'Document management routes are working!' });
+});
+
+app.use('/api/documents', documentManagementRoutes);
+console.log('[DEBUG] Document management routes registered');
 
 // Error handling middleware
 app.use((err, req, res, next) => {

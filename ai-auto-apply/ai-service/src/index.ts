@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import aiRoutes from './routes/aiRoutes';
+import pdfRoutes from './routes/pdfRoutes';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/ai', aiRoutes);
+app.use('/api/pdf', pdfRoutes);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('💥 [EXTREME][ERROR]', {
@@ -83,5 +85,9 @@ app.listen(PORT, () => {
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'https://ollama.com',
     ollamaModel: process.env.OLLAMA_MODEL ?? 'gpt-oss:120b',
     ollamaApiKey: maskedApiKey,
+    services: {
+      ai: '/api/ai',
+      pdf: '/api/pdf'
+    }
   });
 });
