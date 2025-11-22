@@ -1,7 +1,32 @@
-import { useJobs } from '../context/JobContext';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { applicationsAPI } from '../services/apiService';
 
 const ApplicationsPage = () => {
-  const { jobs, loading, error } = useJobs();
+  const { currentUser } = useAuth();
+  const [applications, setApplications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadApplications = async () => {
+      if (currentUser?.email) {
+        try {
+          setLoading(true);
+          const data = await applicationsAPI.getApplications(currentUser.email);
+          setApplications(data);
+          setError(null);
+        } catch (err: any) {
+          console.error('Failed to load applications:', err);
+          setError(err.message || 'Failed to load applications');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadApplications();
+  }, [currentUser]);
 
   if (loading) {
     return (
@@ -19,7 +44,7 @@ const ApplicationsPage = () => {
     );
   }
 
-  const appliedJobs = jobs.filter(job => job.status === 'applied');
+  const appliedJobs = applications.filter(app => app.status === 'applied');
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -28,7 +53,7 @@ const ApplicationsPage = () => {
         <p className="text-gray-600 mt-1">Track your job applications</p>
       </div>
       
-      {appliedJobs.length === 0 ? (
+      {applications.length === 0 ? (
         <div className="border-4 border-dashed border-gray-200 rounded-lg h-96 flex items-center justify-center">
           <div className="text-center">
             <h3 className="text-lg font-medium text-gray-900 mb-2">No applications yet</h3>
@@ -37,22 +62,57 @@ const ApplicationsPage = () => {
         </div>
       ) : (
         <div className="grid gap-4">
-          {appliedJobs.map((job) => (
-            <div key={job.id} className="bg-white p-6 rounded-lg shadow">
+          {applications.map((application) => (
+            <div key={application.id} className="bg-white p-6 rounded-lg shadow">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{job.title}</h3>
-                  <p className="text-gray-600">{job.company}</p>
-                  {job.appliedDate && (
+                  <h3 className="text-lg font-semibold text-gray-900">{application.title}</h3>
+                  <p className="text-gray-600">{application.company}</p>
+                  {application.applied_date && (
                     <p className="text-sm text-gray-500 mt-1">
-                      Applied on {job.appliedDate.toLocaleDateString()}
+                      Applied on {new Date(application.applied_date).toLocaleDateString()}
+                    </p>
+                  )}
+                  {application.location && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      📍 {application.location}
+                    </p>
+                  )}
+                  {application.salary_min && application.salary_max && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      💰 ${application.salary_min.toLocaleString()} - ${application.salary_max.toLocaleString()}
                     </p>
                   )}
                 </div>
-                <span className="inline-block px-3 py-1 text-sm rounded-full bg-green-100 text-green-800">
-                  Applied
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    application.status === 'applied' ? 'bg-green-100 text-green-800' :
+                    application.status === 'interview' ? 'bg-blue-100 text-blue-800' :
+                    application.status === 'offer' ? 'bg-purple-100 text-purple-800' :
+                    application.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+                  </span>
+                  {application.job_url && (
+                    <a
+                      href={application.job_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm mt-2"
+                    >
+                      View Job Posting
+                    </a>
+                  )}
+                </div>
               </div>
+              {application.notes && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-600">
+                    <strong>Notes:</strong> {application.notes}
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>

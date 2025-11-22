@@ -1,0 +1,11 @@
+
+> app-data@1.0.0 start
+> node src/index.js
+
+[DEBUG] email-user-data-fixed route loaded
+[DEBUG] Registering email routes...
+[DEBUG] Registering email-user-data route...
+[DEBUG] All email routes registered
+🚀 App Data API server running on port 6000
+📊 Health check: http://localhost:6000/health
+🔗 API base URL: http://localhost:6000/api

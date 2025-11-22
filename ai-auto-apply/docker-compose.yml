@@ -1,36 +1,62 @@
-version: '3.8'
-
 services:
   frontend:
     build: 
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
-      - backend
+      - appdata
+      - ai-service
     networks:
       - ai-network
+    environment:
+      - REACT_APP_API_URL=http://appdata:6001/api
+      - REACT_APP_AI_SERVICE_URL=http://ai-service:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
-  backend:
+  appdata:
     build: 
-      context: ./backend
+      context: ./appData
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "6001:6001"
     volumes:
-      - ./backend:/app
+      - ./appData:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - PORT=5000
+      - PORT=6001
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aiautoapply
     env_file:
-      - ./backend/.env
+      - ./appData/.env
     networks:
       - ai-network
     depends_on:
-      - redis
       - postgres
+      - redis
+
+  ai-service:
+    build: 
+      context: ./ai-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=8000
+      - APPDATA_API_URL=http://appdata:6001/api
+    env_file:
+      - ./ai-service/.env
+    networks:
+      - ai-network
+    depends_on:
+      - appdata
 
   redis:
     image: redis:alpine
@@ -48,7 +74,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: aiautoapply
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:

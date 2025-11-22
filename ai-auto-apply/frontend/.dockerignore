@@ -1,0 +1,16 @@
+node_modules
+build
+.git
+.gitignore
+Dockerfile
+*.log
+npm-debug.log*
+.dist
+.env
+.eslintcache
+coverage
+.nyc_output
+.vscode
+.idea
+*.tgz
+*.tar.gz
