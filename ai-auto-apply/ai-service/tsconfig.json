@@ -1,5 +1,5 @@
-  {
-    "compilerOptions": {
+{
+  "compilerOptions": {
     "target": "ES2021",
     "module": "CommonJS",
     "rootDir": "src",
@@ -11,7 +11,7 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "types": ["node"]
-    },
-    "include": ["src"],
-    "exclude": ["node_modules", "dist"]
-  }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

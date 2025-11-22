@@ -1,13 +1,16 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Fragment } from 'react';
+import { useOnboarding } from '../context/OnboardingContext';
+import { Fragment, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import OnboardingBanner from './OnboardingBanner';
 
 const navigation = [
   { name: 'Dashboard', href: '/', current: true },
   { name: 'Jobs', href: '/jobs', current: false },
   { name: 'Applications', href: '/applications', current: false },
+  { name: 'Onboarding', href: '/onboarding', current: false },
 ];
 
 function classNames(...classes: string[]) {
@@ -16,7 +19,9 @@ function classNames(...classes: string[]) {
 
 export default function Layout() {
   const { currentUser, signOut } = useAuth();
+  const { isOnboardingComplete } = useOnboarding();
   const navigate = useNavigate();
+  const [showOnboardingBanner, setShowOnboardingBanner] = useState(true);
 
   const handleSignOut = async () => {
     try {
@@ -29,6 +34,11 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Onboarding Banner */}
+      {currentUser && !isOnboardingComplete && showOnboardingBanner && (
+        <OnboardingBanner onClose={() => setShowOnboardingBanner(false)} />
+      )}
+      
       {/* Navigation */}
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
