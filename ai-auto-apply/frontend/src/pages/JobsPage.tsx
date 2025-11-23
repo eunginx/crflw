@@ -338,20 +338,20 @@ const JobsPage = () => {
       {/* Sticky Filter Section with Scroll Effects */}
       <div 
         ref={scrollRef}
-        className={`sticky top-[70px] bg-white z-30 transition-all duration-300 mb-6 ${
+        className={`sticky top-[70px] bg-white z-30 transition-all duration-300 mb-6 rounded-2xl ${
           isScrolled ? 'shadow-md' : 'shadow-sm'
         }`}
       >
-        <div className={`transition-all duration-300 ${
-          isScrolled ? 'py-2' : 'py-4'
+        <div className={`transition-all duration-300 p-4 ${
+          isScrolled ? 'py-3' : 'py-6'
         }`}>
-          <div className="mb-4">
+          <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-800">Filter Jobs</h3>
           </div>
           
           {/* Search Bar */}
-          <div className="mb-4">
-            <div className="flex flex-col md:flex-row gap-3">
+          <div className="mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <input
@@ -359,7 +359,7 @@ const JobsPage = () => {
                     placeholder="Search by title, company, location, or keywords..."
                     value={searchFilters.query}
                     onChange={(e) => setSearchFilters({ ...searchFilters, query: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -396,7 +396,7 @@ const JobsPage = () => {
               <select
                 value={searchFilters.searchBy}
                 onChange={(e) => setSearchFilters({ ...searchFilters, searchBy: e.target.value as any })}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Fields</option>
                 <option value="title">Title</option>
@@ -408,14 +408,14 @@ const JobsPage = () => {
           </div>
           
           {/* Multi-Select Status Filter Chips */}
-          <div className="mb-4">
-            <div className="text-sm font-medium text-gray-700 mb-2">Status Filters (Multi-select)</div>
-            <div className="flex flex-wrap gap-2">
+          <div className="mb-6">
+            <div className="text-sm font-medium text-gray-700 mb-3">Status Filters (Multi-select)</div>
+            <div className="flex flex-wrap gap-3">
               {statusOptions.map((option) => (
                 <button
                   key={option.value}
                   onClick={() => handleStatusToggle(option.value)}
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border-2 transition-all duration-200 hover:shadow-sm cursor-pointer ${
+                  className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border-2 transition-all duration-200 hover:shadow-md cursor-pointer ${
                     selectedStatuses.includes(option.value)
                       ? `${option.color} shadow-md`
                       : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
@@ -435,13 +435,13 @@ const JobsPage = () => {
           <div className="flex flex-wrap items-center gap-4 justify-between">
             <div className="flex flex-wrap gap-4 items-center">
               <div className="min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
                   Company
                 </label>
                 <select
                   value={companyFilter}
                   onChange={(e) => setCompanyFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">All Companies</option>
                   {uniqueCompanies.map(company => (
@@ -451,13 +451,13 @@ const JobsPage = () => {
               </div>
               
               <div className="min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
                   Sort By
                 </label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="date">Date</option>
                   <option value="relevance">Relevance Score</option>
@@ -467,13 +467,13 @@ const JobsPage = () => {
               </div>
               
               <div className="min-w-[120px]">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
                   Order
                 </label>
                 <select
                   value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="desc">Desc</option>
                   <option value="asc">Asc</option>
@@ -484,7 +484,7 @@ const JobsPage = () => {
             <div className="flex items-end">
               <button
                 onClick={clearAllFilters}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors duration-200 font-medium text-sm"
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors duration-200 font-medium text-sm"
               >
                 Clear All Filters
               </button>
