@@ -117,37 +117,16 @@ class JobStatusType {
   static async getEnhancedStatuses(options = {}) {
     const { includeHidden = false } = options;
     
-    let query = `
-      SELECT 
-        st.*,
-        st.ui_classes->>'chip' || ' ' || st.ui_classes->>'bg' || ' ' || st.ui_classes->>'text' as full_chip_class,
-        CASE 
-          WHEN st.category = 'positive' THEN 'progressing'
-          WHEN st.category = 'negative' THEN 'closed'
-          WHEN st.key IN ('saved', 'upcoming') THEN 'pre_application'
-          ELSE 'active'
-        END as lifecycle_stage,
-        CASE 
-          WHEN st.key = 'offer' THEN 1
-          WHEN st.key = 'interview' THEN 2
-          WHEN st.key IN ('applied', 'in_review', 'assessment') THEN 3
-          WHEN st.key = 'saved' THEN 4
-          ELSE 5
-        END as dashboard_priority
-      FROM job_status_types st
-      WHERE 1=1
-    `;
-    
-    const params = [];
-    let paramIndex = 1;
+    let query = 'SELECT * FROM job_statuses_enhanced';
+    const values = [];
     
     if (!includeHidden) {
-      query += ` AND st.hidden = FALSE`;
+      query += ' WHERE hidden = false';
     }
     
-    query += ` ORDER BY st.sort_order ASC`;
+    query += ' ORDER BY sort_order ASC';
     
-    const result = await db.query(query, params);
+    const result = await db.query(query, values);
     return result.rows;
   }
   
@@ -161,8 +140,7 @@ class JobStatusType {
             'label', label,
             'icon', icon,
             'color', color,
-            'sort_order', sort_order,
-            'full_chip_class', ui_classes->>'chip' || ' ' || ui_classes->>'bg' || ' ' || ui_classes->>'text'
+            'sort_order', sort_order
           ) ORDER BY sort_order
         ) as statuses
       FROM job_status_types 
