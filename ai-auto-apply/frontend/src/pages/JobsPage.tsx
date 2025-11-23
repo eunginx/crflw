@@ -354,7 +354,10 @@ const JobsPage = () => {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
+                  <label htmlFor="job-search" className="sr-only">Search jobs</label>
                   <input
+                    id="job-search"
+                    name="job-search"
                     type="text"
                     placeholder="Search by title, company, location, or keywords..."
                     value={searchFilters.query}
@@ -393,7 +396,10 @@ const JobsPage = () => {
               </div>
               
               {/* Search By Dropdown */}
+              <label htmlFor="search-by" className="sr-only">Search by field</label>
               <select
+                id="search-by"
+                name="search-by"
                 value={searchFilters.searchBy}
                 onChange={(e) => setSearchFilters({ ...searchFilters, searchBy: e.target.value as any })}
                 className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -435,10 +441,12 @@ const JobsPage = () => {
           <div className="flex flex-wrap items-center gap-4 justify-between">
             <div className="flex flex-wrap gap-4 items-center">
               <div className="min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label htmlFor="company-filter" className="block text-sm font-medium text-gray-700 mb-3">
                   Company
                 </label>
                 <select
+                  id="company-filter"
+                  name="company-filter"
                   value={companyFilter}
                   onChange={(e) => setCompanyFilter(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -451,10 +459,12 @@ const JobsPage = () => {
               </div>
               
               <div className="min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label htmlFor="sort-by" className="block text-sm font-medium text-gray-700 mb-3">
                   Sort By
                 </label>
                 <select
+                  id="sort-by"
+                  name="sort-by"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -467,10 +477,12 @@ const JobsPage = () => {
               </div>
               
               <div className="min-w-[120px]">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label htmlFor="sort-order" className="block text-sm font-medium text-gray-700 mb-3">
                   Order
                 </label>
                 <select
+                  id="sort-order"
+                  name="sort-order"
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value as any)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"

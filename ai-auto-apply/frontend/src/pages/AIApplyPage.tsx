@@ -375,7 +375,10 @@ const AIApplyPage = () => {
                   <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                     <h3 className="text-lg font-medium text-gray-900 mb-3">Upload New Resume</h3>
                     <div className="flex items-center space-x-4">
+                      <label htmlFor="resume-upload" className="sr-only">Upload resume file</label>
                       <input
+                        id="resume-upload"
+                        name="resume-upload"
                         type="file"
                         accept=".pdf"
                         onChange={handleFileUpload}

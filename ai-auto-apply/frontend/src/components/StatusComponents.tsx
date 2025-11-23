@@ -214,24 +214,31 @@ export const StatusSelect: React.FC<StatusSelectProps> = ({
     : statusOptions;
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className={`
-        block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-        disabled:bg-gray-100 disabled:text-gray-500
-        ${className}
-      `.trim().replace(/\s+/g, ' ')}
-    >
-      <option value="">{placeholder}</option>
-      {selectOptions.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.icon} {option.label}
-        </option>
-      ))}
-    </select>
+    <>
+      <label htmlFor={`status-select-${placeholder.replace(/\s+/g, '-').toLowerCase()}`} className="sr-only">
+        {placeholder}
+      </label>
+      <select
+        id={`status-select-${placeholder.replace(/\s+/g, '-').toLowerCase()}`}
+        name={`status-select-${placeholder.replace(/\s+/g, '-').toLowerCase()}`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={`
+          block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+          disabled:bg-gray-100 disabled:text-gray-500
+          ${className}
+        `.trim().replace(/\s+/g, ' ')}
+      >
+        <option value="">{placeholder}</option>
+        {selectOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.icon} {option.label}
+          </option>
+        ))}
+      </select>
+    </>
   );
 };
 

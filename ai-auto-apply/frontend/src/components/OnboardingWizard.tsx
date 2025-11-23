@@ -149,28 +149,71 @@ const OnboardingWizard = () => {
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700">First Name</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.firstName} onChange={(e) => updateFormData('firstName', e.target.value)} />
+                <label htmlFor="first-name" className="block text-sm font-medium text-gray-700">First Name</label>
+                <input 
+                  id="first-name"
+                  name="first-name"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.firstName} 
+                  onChange={(e) => updateFormData('firstName', e.target.value)} 
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Last Name</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.lastName} onChange={(e) => updateFormData('lastName', e.target.value)} />
+                <label htmlFor="last-name" className="block text-sm font-medium text-gray-700">Last Name</label>
+                <input 
+                  id="last-name"
+                  name="last-name"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.lastName} 
+                  onChange={(e) => updateFormData('lastName', e.target.value)} 
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Phone</label>
-                <input type="tel" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.phone} onChange={(e) => updateFormData('phone', e.target.value)} />
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
+                <input 
+                  id="phone"
+                  name="phone"
+                  type="tel" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.phone} 
+                  onChange={(e) => updateFormData('phone', e.target.value)} 
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Location</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.location} onChange={(e) => updateFormData('location', e.target.value)} />
+                <label htmlFor="location" className="block text-sm font-medium text-gray-700">Location</label>
+                <input 
+                  id="location"
+                  name="location"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.location} 
+                  onChange={(e) => updateFormData('location', e.target.value)} 
+                />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Professional Headline</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Senior Software Engineer" value={formData.headline} onChange={(e) => updateFormData('headline', e.target.value)} />
+                <label htmlFor="headline" className="block text-sm font-medium text-gray-700">Professional Headline</label>
+                <input 
+                  id="headline"
+                  name="headline"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  placeholder="e.g., Senior Software Engineer" 
+                  value={formData.headline} 
+                  onChange={(e) => updateFormData('headline', e.target.value)} 
+                />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Summary</label>
-                <textarea rows={4} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.summary} onChange={(e) => updateFormData('summary', e.target.value)} />
+                <label htmlFor="summary" className="block text-sm font-medium text-gray-700">Summary</label>
+                <textarea 
+                  id="summary"
+                  name="summary"
+                  rows={4} 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.summary} 
+                  onChange={(e) => updateFormData('summary', e.target.value)} 
+                />
               </div>
             </div>
           </div>
@@ -185,21 +228,51 @@ const OnboardingWizard = () => {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Keywords</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., Software Engineer, React, TypeScript" value={formData.keywords} onChange={(e) => updateFormData('keywords', e.target.value)} />
+                <label htmlFor="keywords" className="block text-sm font-medium text-gray-700">Keywords</label>
+                <input 
+                  id="keywords"
+                  name="keywords"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  placeholder="e.g., Software Engineer, React, TypeScript" 
+                  value={formData.keywords} 
+                  onChange={(e) => updateFormData('keywords', e.target.value)} 
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Locations</label>
-                <input type="text" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="e.g., San Francisco, Remote, New York" value={formData.locations} onChange={(e) => updateFormData('locations', e.target.value)} />
+                <label htmlFor="locations" className="block text-sm font-medium text-gray-700">Locations</label>
+                <input 
+                  id="locations"
+                  name="locations"
+                  type="text" 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  placeholder="e.g., San Francisco, Remote, New York" 
+                  value={formData.locations} 
+                  onChange={(e) => updateFormData('locations', e.target.value)} 
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Min Salary</label>
-                  <input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.salaryMin} onChange={(e) => updateFormData('salaryMin', e.target.value)} />
+                  <label htmlFor="salary-min" className="block text-sm font-medium text-gray-700">Min Salary</label>
+                  <input 
+                    id="salary-min"
+                    name="salary-min"
+                    type="number" 
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                    value={formData.salaryMin} 
+                    onChange={(e) => updateFormData('salaryMin', e.target.value)} 
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Max Salary</label>
-                  <input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.salaryMax} onChange={(e) => updateFormData('salaryMax', e.target.value)} />
+                  <label htmlFor="salary-max" className="block text-sm font-medium text-gray-700">Max Salary</label>
+                  <input 
+                    id="salary-max"
+                    name="salary-max"
+                    type="number" 
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                    value={formData.salaryMax} 
+                    onChange={(e) => updateFormData('salaryMax', e.target.value)} 
+                  />
                 </div>
               </div>
             </div>
@@ -215,20 +288,50 @@ const OnboardingWizard = () => {
             </div>
             <div className="space-y-4">
               <div className="flex items-center">
-                <input type="checkbox" className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" checked={formData.enableAutoApply} onChange={(e) => updateFormData('enableAutoApply', e.target.checked)} />
-                <label className="ml-2 block text-sm text-gray-900">Enable auto-apply</label>
+                <input 
+                  id="enable-auto-apply"
+                  name="enable-auto-apply"
+                  type="checkbox" 
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" 
+                  checked={formData.enableAutoApply} 
+                  onChange={(e) => updateFormData('enableAutoApply', e.target.checked)} 
+                />
+                <label htmlFor="enable-auto-apply" className="ml-2 block text-sm text-gray-900">Enable auto-apply</label>
               </div>
               <div className="flex items-center">
-                <input type="checkbox" className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" checked={formData.generateCoverLetters} onChange={(e) => updateFormData('generateCoverLetters', e.target.checked)} />
-                <label className="ml-2 block text-sm text-gray-900">Generate custom cover letters</label>
+                <input 
+                  id="generate-cover-letters"
+                  name="generate-cover-letters"
+                  type="checkbox" 
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" 
+                  checked={formData.generateCoverLetters} 
+                  onChange={(e) => updateFormData('generateCoverLetters', e.target.checked)} 
+                />
+                <label htmlFor="generate-cover-letters" className="ml-2 block text-sm text-gray-900">Generate custom cover letters</label>
               </div>
               <div className="flex items-center">
-                <input type="checkbox" className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" checked={formData.applyRemoteOnly} onChange={(e) => updateFormData('applyRemoteOnly', e.target.checked)} />
-                <label className="ml-2 block text-sm text-gray-900">Apply to remote-only jobs</label>
+                <input 
+                  id="apply-remote-only"
+                  name="apply-remote-only"
+                  type="checkbox" 
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" 
+                  checked={formData.applyRemoteOnly} 
+                  onChange={(e) => updateFormData('applyRemoteOnly', e.target.checked)} 
+                />
+                <label htmlFor="apply-remote-only" className="ml-2 block text-sm text-gray-900">Apply to remote-only jobs</label>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Max applications per day</label>
-                <input type="number" min={1} max={100} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" value={formData.maxApplicationsPerDay} onChange={(e) => updateFormData('maxApplicationsPerDay', Number(e.target.value))} />
+                <label htmlFor="max-applications-per-day" className="block text-sm font-medium text-gray-700">Max applications per day</label>
+                <input 
+                  id="max-applications-per-day"
+                  name="max-applications-per-day"
+                  type="number" 
+                  min={1} 
+                  max={100} 
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={formData.maxApplicationsPerDay} 
+                  onChange={(e) => updateFormData('maxApplicationsPerDay', Number(e.target.value))} 
+                />
               </div>
             </div>
           </div>
