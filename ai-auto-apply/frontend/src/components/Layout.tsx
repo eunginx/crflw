@@ -1,4 +1,4 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useOnboarding } from '../context/OnboardingContext';
 import { Fragment, useState } from 'react';
@@ -7,11 +7,11 @@ import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import OnboardingBanner from './OnboardingBanner';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', current: true },
-  { name: 'Jobs', href: '/jobs', current: false },
-  { name: 'Applications', href: '/applications', current: false },
-  { name: 'AI Apply', href: '/ai-apply', current: false },
-  { name: 'Onboarding', href: '/onboarding', current: false },
+  { name: 'Dashboard', href: '/' },
+  { name: 'Jobs', href: '/jobs' },
+  { name: 'Applications', href: '/applications' },
+  { name: 'AI Apply', href: '/ai-apply' },
+  { name: 'Onboarding', href: '/onboarding' },
 ];
 
 function classNames(...classes: string[]) {
@@ -50,19 +50,21 @@ export default function Layout() {
               </div>
               <nav className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 {navigation.map((item) => (
-                  <Link
+                  <NavLink
                     key={item.name}
                     to={item.href}
-                    className={classNames(
-                      item.current
-                        ? 'border-blue-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700',
-                      'inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-                    )}
-                    aria-current={item.current ? 'page' : undefined}
+                    end={item.href === '/'}
+                    className={({ isActive }) =>
+                      classNames(
+                        isActive
+                          ? 'border-blue-500 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700',
+                        'inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+                      )
+                    }
                   >
                     {item.name}
-                  </Link>
+                  </NavLink>
                 ))}
               </nav>
             </div>
@@ -89,7 +91,7 @@ export default function Layout() {
                     <Menu.Items className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
                       <Menu.Item>
                         {({ active }) => (
-                          <Link
+                          <NavLink
                             to="/profile"
                             className={classNames(
                               active ? 'bg-gray-100' : '',
@@ -97,12 +99,12 @@ export default function Layout() {
                             )}
                           >
                             Your Profile
-                          </Link>
+                          </NavLink>
                         )}
                       </Menu.Item>
                       <Menu.Item>
                         {({ active }) => (
-                          <Link
+                          <NavLink
                             to="/settings"
                             className={classNames(
                               active ? 'bg-gray-100' : '',
@@ -110,7 +112,7 @@ export default function Layout() {
                             )}
                           >
                             Settings
-                          </Link>
+                          </NavLink>
                         )}
                       </Menu.Item>
                       <Menu.Item>
@@ -130,12 +132,12 @@ export default function Layout() {
                   </Transition>
                 </Menu>
               ) : (
-                <Link
+                <NavLink
                   to="/login"
                   className="ml-8 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Sign in
-                </Link>
+                </NavLink>
               )}
             </div>
             <div className="-mr-2 flex items-center sm:hidden">
