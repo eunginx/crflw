@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { applicationsAPI } from '../services/apiService';
+import { StatusChip } from '../components/StatusComponents';
 
 const ApplicationsPage = () => {
   const { currentUser } = useAuth();
@@ -85,15 +86,7 @@ const ApplicationsPage = () => {
                   )}
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    application.status === 'applied' ? 'bg-green-100 text-green-800' :
-                    application.status === 'interview' ? 'bg-blue-100 text-blue-800' :
-                    application.status === 'offer' ? 'bg-purple-100 text-purple-800' :
-                    application.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-                  </span>
+                  <StatusChip status={application.status} />
                   {application.job_url && (
                     <a
                       href={application.job_url}

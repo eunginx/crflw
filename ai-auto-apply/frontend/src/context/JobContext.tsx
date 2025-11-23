@@ -6,7 +6,7 @@ interface JobApplicationData {
   id: string;
   title: string;
   company: string;
-  status: 'saved' | 'applied' | 'interview' | 'offer' | 'rejected';
+  status: string; // Now dynamic - any valid status from database
   applied_date?: string;
   job_url?: string;
   description?: string;
@@ -20,7 +20,7 @@ interface Job {
   id: string;
   title: string;
   company: string;
-  status: 'saved' | 'applied' | 'interview' | 'offer' | 'rejected';
+  status: string; // Now dynamic - any valid status from database
   appliedDate?: Date;
   jobUrl?: string;
   description?: string;

@@ -18,6 +18,7 @@ const resumesEmailRoutes = require('./routes/resumes-email');
 const resumeProcessingRoutes = require('./routes/resumeProcessingRoutes');
 const firebaseMetadataRoutes = require('./routes/firebaseMetadataRoutes');
 const documentManagementRoutes = require('./routes/documentManagementRoutes');
+const jobStatusRoutes = require('./routes/job-statuses');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -78,6 +79,10 @@ app.get('/api/documents/test', (req, res) => {
 
 app.use('/api/documents', documentManagementRoutes);
 console.log('[DEBUG] Document management routes registered');
+
+// Job Statuses API Routes
+app.use('/api/job-statuses', jobStatusRoutes);
+console.log('[DEBUG] Job status routes registered');
 
 // Error handling middleware
 app.use((err, req, res, next) => {

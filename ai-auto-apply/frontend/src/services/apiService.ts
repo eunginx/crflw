@@ -570,3 +570,72 @@ export const emailAnalyticsAPI = {
     return apiCall(`/email/settings/analytics/users/${settingName}/${settingValue}`);
   },
 };
+
+// Job Statuses API
+export const jobStatusesAPI = {
+  // Get all job statuses
+  async getStatuses(options?: { includeHidden?: boolean; category?: string; groupLabel?: string }) {
+    console.log('[API][JOB-STATUSES] Getting job statuses with options:', options);
+    const params = new URLSearchParams();
+    if (options?.includeHidden) params.append('includeHidden', 'true');
+    if (options?.category) params.append('category', options.category);
+    if (options?.groupLabel) params.append('groupLabel', options.groupLabel);
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiCall(`/job-statuses${query}`);
+  },
+
+  // Get enhanced statuses with computed fields
+  async getEnhancedStatuses(options?: { includeHidden?: boolean }) {
+    console.log('[API][JOB-STATUSES] Getting enhanced job statuses');
+    const params = new URLSearchParams();
+    if (options?.includeHidden) params.append('includeHidden', 'true');
+    
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiCall(`/job-statuses/enhanced${query}`);
+  },
+
+  // Get statuses grouped by category
+  async getStatusGroups() {
+    console.log('[API][JOB-STATUSES] Getting job status groups');
+    return apiCall('/job-statuses/groups');
+  },
+
+  // Get analytics data
+  async getAnalyticsData() {
+    console.log('[API][JOB-STATUSES] Getting analytics data');
+    return apiCall('/job-statuses/analytics');
+  },
+
+  // Get specific status by key
+  async getStatus(key: string) {
+    console.log('[API][JOB-STATUSES] Getting status:', key);
+    return apiCall(`/job-statuses/${key}`);
+  },
+
+  // Create new status (admin only)
+  async createStatus(statusData: any) {
+    console.log('[API][JOB-STATUSES] Creating new status');
+    return apiCall('/job-statuses', {
+      method: 'POST',
+      body: JSON.stringify(statusData),
+    });
+  },
+
+  // Update status (admin only)
+  async updateStatus(id: string, updates: any) {
+    console.log('[API][JOB-STATUSES] Updating status:', id);
+    return apiCall(`/job-statuses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  },
+
+  // Delete status (admin only)
+  async deleteStatus(id: string) {
+    console.log('[API][JOB-STATUSES] Deleting status:', id);
+    return apiCall(`/job-statuses/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
