@@ -10,6 +10,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', current: true },
   { name: 'Jobs', href: '/jobs', current: false },
   { name: 'Applications', href: '/applications', current: false },
+  { name: 'AI Apply', href: '/ai-apply', current: false },
   { name: 'Onboarding', href: '/onboarding', current: false },
 ];
 

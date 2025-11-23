@@ -1,7 +1,7 @@
 // Programmatic API base URL configuration with environment detection
 const getApiBaseUrl = () => {
   const env = process.env.REACT_APP_ENV || 'local';
-  const backendPort = process.env.REACT_APP_BACKEND_PORT || '6001';
+  const backendPort = process.env.REACT_APP_BACKEND_PORT || '8000'; // Changed from 6001 to 8000
   
   if (env === 'docker') {
     return `http://localhost:8100/api`;
@@ -228,35 +228,122 @@ export const preferencesAPI = {
   },
 };
 
-// Resume Files API
-export const resumesAPI = {
-  // Get all resume files
-  async getResumes(firebaseUid: string) {
-    return apiCall(`/resumes/${firebaseUid}`);
+// Resume Files API (Email-based with file storage)
+export const resumesEmailAPI = {
+  // Get all resume files for a user by email
+  async getResumes(email: string) {
+    console.log('[API][RESUMES-EMAIL] Getting resumes for email:', email);
+    try {
+      const result = await apiCall(`/email/resumes/${encodeURIComponent(email)}`);
+      console.log('[API][RESUMES-EMAIL] Resumes retrieved:', result);
+      return result || [];
+    } catch (error) {
+      console.error('[API][RESUMES-EMAIL] Error getting resumes:', error);
+      throw error;
+    }
   },
 
-  // Get active resume
-  async getActiveResume(firebaseUid: string) {
-    return apiCall(`/resumes/${firebaseUid}/active`);
+  // Get active resume for a user by email
+  async getActiveResume(email: string) {
+    console.log('[API][RESUMES-EMAIL] Getting active resume for email:', email);
+    try {
+      const result = await apiCall(`/email/resumes/${encodeURIComponent(email)}/active`);
+      console.log('[API][RESUMES-EMAIL] Active resume retrieved:', result);
+      return result;
+    } catch (error: any) {
+      if (error.status === 404) {
+        console.log('[API][RESUMES-EMAIL] No active resume found');
+        return null;
+      }
+      console.error('[API][RESUMES-EMAIL] Error getting active resume:', error);
+      throw error;
+    }
   },
 
-  // Upload new resume
-  async uploadResume(firebaseUid: string, fileData: any) {
-    return apiCall(`/resumes/${firebaseUid}`, {
-      method: 'POST',
-      body: JSON.stringify(fileData),
+  // Upload new resume file (supports FormData)
+  async uploadResume(email: string, file: File) {
+    console.log('[API][RESUMES-EMAIL] Uploading resume for email:', email, 'file:', file.name);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const url = `${API_BASE_URL}/email/resumes/${encodeURIComponent(email)}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = new Error(`HTTP error! status: ${response.status}`);
+        (error as any).status = response.status;
+        (error as any).statusText = response.statusText;
+        throw error;
+      }
+
+      const result = await response.json();
+      console.log('[API][RESUMES-EMAIL] Resume uploaded successfully:', result);
+      return result;
+    } catch (error: any) {
+      console.error('[API][RESUMES-EMAIL] Error uploading resume:', error);
+      
+      // Attach error to window for debugging
+      (window as any).__LAST_API_ERROR__ = error;
+      
+      // Rethrow with more context
+      const enhancedError = new Error(error.message || 'Resume upload failed');
+      Object.assign(enhancedError, error);
+      throw enhancedError;
+    }
+  },
+
+  // Set active resume
+  async setActiveResume(email: string, resumeId: string) {
+    console.log('[API][RESUMES-EMAIL] Setting active resume:', resumeId, 'for email:', email);
+    return apiCall(`/email/resumes/${encodeURIComponent(email)}/${resumeId}/active`, {
+      method: 'PUT',
     });
   },
 
-  // Deactivate resume
-  async deactivateResume(firebaseUid: string, resumeId: string) {
-    return apiCall(`/resumes/${firebaseUid}/${resumeId}`, {
+  // Delete resume file
+  async deleteResume(email: string, resumeId: string) {
+    console.log('[API][RESUMES-EMAIL] Deleting resume:', resumeId, 'for email:', email);
+    return apiCall(`/email/resumes/${encodeURIComponent(email)}/${resumeId}`, {
       method: 'DELETE',
     });
   },
+
+  // Download resume file
+  async downloadResume(resumeId: string): Promise<Blob> {
+    console.log('[API][RESUMES-EMAIL] Downloading resume:', resumeId);
+    
+    const url = `${API_BASE_URL}/email/resumes/file/${resumeId}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = new Error(`HTTP error! status: ${response.status}`);
+        (error as any).status = response.status;
+        (error as any).statusText = response.statusText;
+        throw error;
+      }
+
+      return await response.blob();
+    } catch (error: any) {
+      console.error('[API][RESUMES-EMAIL] Error downloading resume:', error);
+      throw error;
+    }
+  },
 };
 
-// ===== UNIFIED USER DATA API =====
+// Email-based Resume API
+export const resumesAPI = resumesEmailAPI;
 // This is the new unified API that provides all user data in a single endpoint
 
 export const emailUserDataAPI = {
