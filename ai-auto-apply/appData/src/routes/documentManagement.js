@@ -4,6 +4,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { pool } from '../db.js';
+import { parseResume } from '../services/pdfParserService.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -515,11 +516,65 @@ async function processDocument(req, res) {
     // Perform AI analysis if text was extracted
     if (pdfResult.text && pdfResult.text.length > 100) {
       try {
-        const ResumeAnalysisService = (await import('../services/resumeAnalysisService.js')).default;
-        await ResumeAnalysisService.analyzeResume(documentId, pdfResult.text);
-        console.log('✅ AI analysis completed for document:', documentId);
+        console.log('🤖 Starting Ollama AI analysis...');
+        
+        // 1. Aesthetic Analysis using screenshot
+        let aestheticScore = 75; // Default score
+        if (screenshotPath) {
+          try {
+            const fullScreenshotPath = path.join(__dirname, '..', '..', screenshotPath);
+            const aestheticResponse = await fetch('http://localhost:8000/api/ai/aesthetic', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ imagePath: fullScreenshotPath })
+            });
+            
+            if (aestheticResponse.ok) {
+              const aestheticResult = await aestheticResponse.json();
+              aestheticScore = aestheticResult.data.aestheticScore;
+              console.log('✅ Aesthetic analysis completed, score:', aestheticScore);
+            }
+          } catch (aestheticError) {
+            console.error('❌ Aesthetic analysis failed:', aestheticError);
+          }
+        }
+        
+        // 2. Comprehensive Resume Analysis
+        try {
+          const fullScreenshotPath = screenshotPath ? path.join(__dirname, '..', '..', screenshotPath) : null;
+          const analysisResponse = await fetch('http://localhost:8000/api/ai/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              documentId,
+              extractedText: pdfResult.text,
+              imagePath: fullScreenshotPath
+            })
+          });
+          
+          if (analysisResponse.ok) {
+            const analysisResult = await analysisResponse.json();
+            console.log('✅ Comprehensive AI analysis completed');
+          }
+        } catch (analysisError) {
+          console.error('❌ Comprehensive analysis failed:', analysisError);
+        }
+        
+        // 3. Store aesthetic score in processing results
+        await pool.query(
+          `UPDATE document_processing_results 
+           SET aesthetic_score = $1 
+           WHERE document_id = $2`,
+          [aestheticScore, documentId]
+        );
+        
+        console.log('✅ AI analysis pipeline completed for document:', documentId);
       } catch (analysisError) {
-        console.error('❌ AI analysis failed:', analysisError);
+        console.error('❌ AI analysis pipeline failed:', analysisError);
         // Don't fail the entire processing if analysis fails
       }
     }
@@ -803,11 +858,56 @@ async function processQueue() {
 
         // Process document with options from queue
         const processingOptions = queueItem.processing_options || {};
-        const results = await pdfService.processDocument(
-          queueItem.document_id,
-          document.file_path,
-          processingOptions
-        );
+        console.log('🔍 Processing document:', queueItem.document_id, 'file_path:', document.file_path);
+        
+        const results = await parseResume(document.file_path);
+        
+        console.log('🔍 PDF processing results:', {
+          textLength: results.text?.length || 0,
+          numPages: results.numPages || 0,
+          hasScreenshot: !!results.previewImageBase64
+        });
+
+        // Store processing results in database
+        const client = await pool.connect();
+        try {
+          await client.query(
+            `INSERT INTO document_processing_results 
+             (document_id, extracted_text, text_length, num_pages, pdf_title, pdf_author, pdf_creator, pdf_producer, screenshot_path, processed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+             ON CONFLICT (document_id) DO UPDATE SET
+             extracted_text = EXCLUDED.extracted_text,
+             text_length = EXCLUDED.text_length,
+             num_pages = EXCLUDED.num_pages,
+             pdf_title = EXCLUDED.pdf_title,
+             pdf_author = EXCLUDED.pdf_author,
+             pdf_creator = EXCLUDED.pdf_creator,
+             pdf_producer = EXCLUDED.pdf_producer,
+             screenshot_path = EXCLUDED.screenshot_path,
+             processed_at = CURRENT_TIMESTAMP`,
+            [
+              queueItem.document_id,
+              results.text || '',
+              results.text?.length || 0,
+              results.numPages || 0,
+              results.info?.Title || '',
+              results.info?.Author || '',
+              results.info?.Creator || '',
+              results.info?.Producer || '',
+              results.previewImageBase64 || null
+            ]
+          );
+
+          // Update document status to processed
+          await client.query(
+            'UPDATE documents SET processing_status = $2 WHERE id = $1',
+            [queueItem.document_id, 'completed']
+          );
+
+          console.log('🔍 Processing results stored in database');
+        } finally {
+          client.release();
+        }
 
         // Update queue status to completed
         await pool.query(

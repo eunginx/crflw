@@ -4,7 +4,7 @@ export interface ResumeDocument {
   original_filename: string;
   uploaded_at: string;
   is_active: boolean;
-  status?: "processed" | "pending" | "error";
+  status?: "processed" | "pending" | "error" | "processing";
   file_path?: string;
   file_size?: number;
   mime_type?: string;

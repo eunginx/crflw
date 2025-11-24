@@ -12,7 +12,7 @@ const convertToResumeDocument = (resume: ResumeData, userId: string): ResumeDocu
   uploaded_at: resume.upload_date,
   is_active: resume.is_active,
   status: resume.processing_status === 'completed' ? 'processed' : 
-         resume.processing_status === 'processing' ? 'pending' : 
+         resume.processing_status === 'processing' ? 'processing' : 
          resume.processing_status === 'error' ? 'error' : 'pending',
   file_path: resume.filename, // Use filename as file_path
   file_size: resume.file_size,
@@ -53,6 +53,14 @@ interface UseAIApplyManagerReturn {
   deleteResume: (resumeId: string) => Promise<void>;
   refreshResults: (resumeId?: string) => Promise<void>;
   loadStatus: () => Promise<void>;
+  startAIAnalysis: (resumeId: string) => Promise<void>;
+  
+  // AI Apply Pipeline Actions
+  getJobMatches: (resumeId: string, userId: string, preferences?: any) => Promise<any>;
+  generateCoverLetter: (resumeId: string, userId: string, jobId: string, jobDetails?: any) => Promise<any>;
+  autoFillApplication: (resumeId: string, userId: string, jobId: string, applicationForm?: any) => Promise<any>;
+  submitApplication: (resumeId: string, userId: string, jobId: string, applicationData: any, coverLetterId?: string) => Promise<any>;
+  getApplicationStatus: (userId: string) => Promise<any>;
   
   // Helper
   getScreenshotUrl: (screenshotPath?: string) => string | null;
@@ -76,49 +84,60 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
   // Load all resumes for the user
   const loadResumes = useCallback(async () => {
-    if (!userId || loadingRef.current) return;
+    console.log('🔍 loadResumes called:', { userId, loadingRef: loadingRef.current });
+    if (!userId || loadingRef.current) {
+      console.log('🔍 loadResumes early return:', { userId: !!userId, loadingRef: loadingRef.current });
+      return;
+    }
     
     try {
       loadingRef.current = true;
       setLoading(true);
+      console.log('🔍 loadResumes calling aiApplyService.getUserResumes...');
       
       const response = await aiApplyService.getUserResumes(userId);
+      console.log('🔍 loadResumes API response:', response);
       
       // Convert ResumeData to ResumeDocument
       const convertedResumes = response.data.map(resume => 
         convertToResumeDocument(resume, userId)
       );
+      console.log('🔍 loadResumes converted resumes:', convertedResumes);
       
-      if (mountedRef.current) {
-        setResumes(convertedResumes);
-        
-        // Find active resume
-        const active = convertedResumes.find(resume => resume.is_active);
-        if (active) {
-          setActiveResumeState(active);
-          // Auto-load results for active resume (don't await to avoid blocking)
-          refreshResults(active.id).catch(err => {
-            console.log('Failed to load results for active resume:', err);
-          });
-        } else {
-          setActiveResumeState(null);
-          setProcessingResults(null);
-        }
+      console.log('🔍 loadResumes updating state...');
+      setResumes(convertedResumes);
+      
+      // Find active resume
+      const active = convertedResumes.find(resume => resume.is_active);
+      console.log('🔍 loadResumes checking for active resume:', {
+        convertedResumes,
+        is_active_values: convertedResumes.map(r => ({ id: r.id, is_active: r.is_active }))
+      });
+      if (active) {
+        console.log('🔍 loadResumes found active resume:', active);
+        setActiveResumeState(active);
+        // Auto-load results for active resume (don't await to avoid blocking)
+        refreshResults(active.id).catch(err => {
+          console.log('Failed to load results for active resume:', err);
+        });
+      } else {
+        console.log('🔍 loadResumes no active resume found');
+        setActiveResumeState(null);
+        setProcessingResults(null);
       }
     } catch (error) {
       console.error('Error loading resumes:', error);
-      if (mountedRef.current) {
-        // Don't show alert for first-time users
-        if (resumes.length > 0) {
-          alert('Failed to load resumes. Please try again.');
-        }
+      // Don't show alert for first-time users
+      if (resumes.length > 0) {
+        alert('Failed to load resumes. Please try again.');
       }
     } finally {
-      // Always clear loading state, even if unmounted
+      // Always clear loading state
       setLoading(false);
       loadingRef.current = false;
+      console.log('🔍 loadResumes completed');
     }
-  }, [userId]);
+  }, [userId, resumes.length]);
 
   // Set a resume as active
   const setActiveResume = useCallback(async (resumeId: string) => {
@@ -182,7 +201,7 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       await setActiveResume(response.data.resumeId);
       
       setStatus('idle');
-      alert(`Resume "${file.name}" uploaded successfully! Processing will begin automatically.`);
+      alert(`Resume "${file.name}" uploaded successfully! Set as active and ready for processing.`);
       console.log('🔍 uploadResume completed successfully');
     } catch (error) {
       console.error('🔍 uploadResume error:', error);
@@ -209,23 +228,28 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
     pollingRef.current = setInterval(async () => {
       try {
+        console.log('🔍 polling for results...');
         const response = await aiApplyService.getResumeResults(resumeId);
+        console.log('🔍 polling response:', response);
         
-        if (mountedRef.current) {
-          setProcessingResults(response.data);
-          
-          // Stop polling if processing is complete
-          if (response.data?.processing_status === 'completed') {
-            setStatus('completed');
-            if (pollingRef.current) {
-              clearInterval(pollingRef.current);
-              pollingRef.current = null;
-            }
-            console.log('🔍 startPolling processing completed');
+        setProcessingResults(response.data);
+        
+        // Stop polling if processing is complete
+        if (response.data?.processing_status === 'completed') {
+          console.log('🔍 polling completed, stopping...');
+          setStatus('completed');
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
           }
         }
       } catch (error) {
-        console.error('Error polling results:', error);
+        console.error('Polling error:', error);
+        // Stop polling on error
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
       }
     }, 2000); // Poll every 2 seconds
   }, []);
@@ -355,6 +379,85 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
     return aiApplyService.getScreenshotUrl(screenshotPath);
   }, []);
 
+  // AI Apply Pipeline Methods
+  const getJobMatches = useCallback(async (resumeId: string, userId: string, preferences?: any) => {
+    try {
+      return await aiApplyService.getJobMatches(resumeId, userId, preferences);
+    } catch (error) {
+      console.error('Error getting job matches:', error);
+      throw error;
+    }
+  }, []);
+
+  const generateCoverLetter = useCallback(async (resumeId: string, userId: string, jobId: string, jobDetails?: any) => {
+    try {
+      return await aiApplyService.generateCoverLetter(resumeId, userId, jobId, jobDetails);
+    } catch (error) {
+      console.error('Error generating cover letter:', error);
+      throw error;
+    }
+  }, []);
+
+  const autoFillApplication = useCallback(async (resumeId: string, userId: string, jobId: string, applicationForm?: any) => {
+    try {
+      return await aiApplyService.autoFillApplication(resumeId, userId, jobId, applicationForm);
+    } catch (error) {
+      console.error('Error auto-filling application:', error);
+      throw error;
+    }
+  }, []);
+
+  const submitApplication = useCallback(async (resumeId: string, userId: string, jobId: string, applicationData: any, coverLetterId?: string) => {
+    try {
+      return await aiApplyService.submitApplication(resumeId, userId, jobId, applicationData, coverLetterId);
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      throw error;
+    }
+  }, []);
+
+  const getApplicationStatus = useCallback(async (userId: string) => {
+    try {
+      return await aiApplyService.getApplicationStatus(userId);
+    } catch (error) {
+      console.error('Error getting application status:', error);
+      throw error;
+    }
+  }, []);
+
+  const startAIAnalysis = useCallback(async (resumeId: string) => {
+    if (!userId) {
+      throw new Error('User ID required for AI analysis');
+    }
+
+    try {
+      console.log('🧠 startAIAnalysis called:', { resumeId, userId });
+      
+      // Start AI analysis
+      const result = await aiApplyService.startAIAnalysis(resumeId);
+      console.log('🧠 startAIAnalysis result:', result);
+      
+      // Refresh results to get AI analysis data
+      await refreshResults(resumeId);
+      
+      return result;
+    } catch (error) {
+      console.error('Error starting AI analysis:', error);
+      throw error;
+    }
+  }, [userId, refreshResults]);
+
+  // Load resumes when userId changes
+  useEffect(() => {
+    console.log('🔍 useEffect triggered for userId:', userId);
+    if (userId) {
+      console.log('🔍 Calling loadResumes...');
+      loadResumes();
+    } else {
+      console.log('🔍 No userId, skipping loadResumes');
+    }
+  }, [userId, loadResumes]);
+
   return {
     // State
     resumes,
@@ -376,6 +479,14 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
     deleteResume,
     refreshResults,
     loadStatus,
+    startAIAnalysis,
+    
+    // AI Apply Pipeline Actions
+    getJobMatches,
+    generateCoverLetter,
+    autoFillApplication,
+    submitApplication,
+    getApplicationStatus,
     
     // Helper
     getScreenshotUrl,

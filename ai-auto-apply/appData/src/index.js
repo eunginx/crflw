@@ -28,6 +28,8 @@ import firebaseMetadataRoutes from './routes/firebaseMetadataRoutes.js';
 import documentManagementRoutes from './routes/documentManagementRoutes.js';
 import jobStatusRoutes from './routes/job-statuses.js';
 import aiApplyRoutes from './routes/aiApplyRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
+import aiApplyPipelineRoutes from './routes/aiApplyPipelineRoutes.js';
 // import pdfRoutes from './routes/pdfRoutes.js';
 
 const app = express();
@@ -106,6 +108,14 @@ console.log('[DEBUG] Job status routes registered');
 // AI Apply API Routes
 app.use('/api/ai-apply', aiApplyRoutes);
 console.log('[DEBUG] AI Apply routes registered');
+
+// AI Processing Routes (Ollama integration)
+app.use('/api/ai', aiRoutes);
+console.log('[DEBUG] AI processing routes registered');
+
+// AI Apply Pipeline Routes
+app.use('/api/ai-apply-pipeline', aiApplyPipelineRoutes);
+console.log('[DEBUG] AI Apply pipeline routes registered');
 
 // PDF Processing Routes
 // app.use('/api/pdf', pdfRoutes);

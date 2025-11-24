@@ -295,6 +295,136 @@ class AIApplyService {
   }
 
   /**
+   * AI Apply Pipeline Methods
+   */
+
+  /**
+   * Get job matches for a resume
+   */
+  async getJobMatches(resumeId: string, userId: string, preferences?: any): Promise<any> {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai-apply-pipeline/job-matching`,
+        { resumeId, userId, preferences }
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error getting job matches:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to get job matches'
+          : 'Network error while fetching job matches'
+      );
+    }
+  }
+
+  /**
+   * Generate cover letter for a job
+   */
+  async generateCoverLetter(resumeId: string, userId: string, jobId: string, jobDetails?: any): Promise<any> {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai-apply-pipeline/generate-cover-letter`,
+        { resumeId, userId, jobId, jobDetails }
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error generating cover letter:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to generate cover letter'
+          : 'Network error while generating cover letter'
+      );
+    }
+  }
+
+  /**
+   * Auto-fill application data
+   */
+  async autoFillApplication(resumeId: string, userId: string, jobId: string, applicationForm?: any): Promise<any> {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai-apply-pipeline/auto-fill-application`,
+        { resumeId, userId, jobId, applicationForm }
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error auto-filling application:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to auto-fill application'
+          : 'Network error while auto-filling application'
+      );
+    }
+  }
+
+  /**
+   * Submit application
+   */
+  async submitApplication(resumeId: string, userId: string, jobId: string, applicationData: any, coverLetterId?: string): Promise<any> {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai-apply-pipeline/submit-application`,
+        { resumeId, userId, jobId, applicationData, coverLetterId }
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to submit application'
+          : 'Network error while submitting application'
+      );
+    }
+  }
+
+  /**
+   * Get application status and history
+   */
+  async getApplicationStatus(userId: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/ai-apply-pipeline/application-status/${userId}`
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error getting application status:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to get application status'
+          : 'Network error while fetching application status'
+      );
+    }
+  }
+
+  /**
+   * Start AI analysis for a processed resume
+   */
+  async startAIAnalysis(documentId: string): Promise<any> {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai/analyze-resume`,
+        { documentId }
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Failed to start AI analysis:', error);
+      if (axios.isAxiosError(error)) {
+        throw new Error(
+          error.response?.data?.error || 'Failed to start AI analysis'
+        );
+      }
+      throw new Error('Network error while starting AI analysis');
+    }
+  }
+
+  /**
    * Check if the service is healthy
    */
   async healthCheck(): Promise<{ service: string; status: string; timestamp: string }> {
