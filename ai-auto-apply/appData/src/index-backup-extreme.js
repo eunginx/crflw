@@ -1,14 +1,5 @@
 import express from 'express';
-
-// Enable extreme logging
-if (process.env.DEBUG === 'extreme') {
-  console.log("🔥 EXTREME LOGGING MODE ENABLED");
-  console.log("🔥 Environment:", process.env.NODE_ENV);
-  console.log("🔥 Debug Level:", process.env.LOG_LEVEL);
-  console.log("🔥 Timestamp:", new Date().toISOString());
-  console.log("🔥 Process ID:", process.pid);
-  console.log("🔥 Memory Usage:", JSON.stringify(process.memoryUsage()));
-}import cors from 'cors';
+import cors from 'cors';
 import 'dotenv/config';
 
 // Import only essential routes
@@ -19,12 +10,7 @@ import emailUserDataRoutes from './routes/email-user-data.js';
 import jobStatusesRoutes from './routes/job-statuses.js';
 
 const app = express();
-
-// Extreme logging middleware (if enabled)
-if (process.env.DEBUG === 'extreme') {
-  const extremeLogging = require('./extremeLogging.js');
-  app.use(extremeLogging);
-}const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8000;
 
 // Basic middleware
 app.use(cors({
