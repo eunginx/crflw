@@ -9,12 +9,10 @@ const convertToResumeDocument = (resume: ResumeData, userEmail: string): ResumeD
   id: resume.id,
   user_id: userEmail, // Use email as user_id
   original_filename: resume.original_filename,
-  uploaded_at: resume.upload_date,
+  upload_date: resume.upload_date, // Changed from uploaded_at to match API
   is_active: resume.is_active,
-  status: resume.processing_status === 'completed' ? 'processed' : 
-         resume.processing_status === 'processing' ? 'processing' : 
-         resume.processing_status === 'error' ? 'error' : 'pending',
-  file_path: resume.filename, // Use filename as file_path
+  processing_status: resume.processing_status as "completed" | "pending" | "error" | "processing",
+  filename: resume.filename, // Use filename field
   file_size: resume.file_size,
   mime_type: resume.mime_type
 });
@@ -24,10 +22,10 @@ const convertUploadResponseToResumeDocument = (response: ResumeUploadResponse['d
   id: response.resumeId,
   user_id: userEmail, // Use email as user_id
   original_filename: response.originalFilename,
-  uploaded_at: response.uploadDate,
+  upload_date: response.uploadDate, // Changed from uploaded_at to match interface
   is_active: true, // New uploads are active by default
-  status: 'pending', // New uploads start as pending
-  file_path: response.filename,
+  processing_status: 'pending', // New uploads start as pending
+  filename: response.filename,
   file_size: response.size,
   mime_type: 'application/pdf' // Default for resumes
 });
@@ -38,21 +36,26 @@ interface UseAIApplyManagerReturn {
   activeResume: ResumeDocument | null;
   processingResults: ResumeProcessingResults | null;
   status: ProcessingStatus;
-  currentStatus: StatusResponse['data'] | null;
-  
-  // Loading states
+  error: string | null;
   loading: boolean;
   uploading: boolean;
   processing: boolean;
   
   // Actions
+  uploadResume: (file: File, userEmail?: string, userId?: string) => Promise<void>;
   loadResumes: () => Promise<void>;
-  uploadResume: (file: File, userEmail?: string) => Promise<void>;
   setActiveResume: (resumeId: string) => Promise<void>;
-  processResume: (resumeId?: string) => Promise<void>;
+  processResume: (resumeId: string) => Promise<void>;
   deleteResume: (resumeId: string) => Promise<void>;
-  refreshResults: (resumeId?: string) => Promise<void>;
+  refreshResults: (resumeId: string) => Promise<void>;
   loadStatus: () => Promise<void>;
+  checkIfNeedsProcessing: (userEmail: string) => Promise<any>;
+  
+  // AI Analysis Actions
+  analyzeAestheticScore: (resumeText: string, resumeContent: string) => Promise<any>;
+  analyzeSkills: (resumeText: string) => Promise<any>;
+  generateRecommendations: (resumeText: string, resumeSections: any[], currentSkills: any) => Promise<any>;
+  runAIAnalysis: (resumeText: string, resumeContent: string, resumeSections: any[]) => Promise<any>;
   startAIAnalysis: (resumeId: string) => Promise<void>;
   
   // AI Apply Pipeline Actions
@@ -76,6 +79,7 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Refs to prevent duplicate requests
   const loadingRef = useRef(false);
@@ -110,8 +114,36 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       const active = convertedResumes.find(resume => resume.is_active);
       if (active) {
         setActiveResumeState(active);
-        // Auto-load results for active resume (don't await to avoid blocking)
-        refreshResults(active.id).catch(console.error);
+        
+        // Always try to load persistent results first
+        try {
+          const persistentResults = await aiApplyService.getPersistentProcessingResults(effectiveUserEmail);
+          console.log('🔍 Loaded persistent results:', persistentResults.data);
+          
+          if (persistentResults.data) {
+            // Use persistent results if available
+            setProcessingResults(persistentResults.data);
+            setStatus('completed');
+            setProcessing(false);
+            console.log('🔍 Using persistent processing results');
+          } else {
+            // No persistent results, check if we need to process
+            const processingStatus = await aiApplyService.checkIfNeedsProcessing(effectiveUserEmail);
+            console.log('🔍 Processing status check:', processingStatus.data);
+            
+            if (processingStatus.data.needsProcessing) {
+              console.log('🔍 Resume needs processing, no results to show');
+              // Don't load anything, let user click "Parse PDF"
+            } else {
+              // Try to load regular results as fallback
+              refreshResults(active.id).catch(console.error);
+            }
+          }
+        } catch (statusError) {
+          console.error('Error loading persistent results:', statusError);
+          // Fallback to regular results
+          refreshResults(active.id).catch(console.error);
+        }
       } else {
         setActiveResumeState(null);
       }
@@ -170,11 +202,11 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
   }, [userEmail, resumes]);
 
   // Upload a new resume
-  const uploadResume = useCallback(async (file: File, userEmailParam?: string) => {
-    console.log('🔍 uploadResume called:', { file: file.name, userEmail, userEmailParam });
+  const uploadResume = useCallback(async (file: File, userEmail?: string, userId?: string) => {
+    console.log('🔍 uploadResume called:', { file: file.name, userEmail });
     
-    // Use provided userEmailParam or fall back to context userEmail or test user
-    const effectiveUserEmail = userEmailParam || userEmail || 'test@example.com';
+    // Use provided userEmail or fall back to context userEmail or test user
+    const effectiveUserEmail = userEmail || userEmail || 'test@example.com';
     
     if (!effectiveUserEmail) {
       console.log('🔍 uploadResume early return: no userEmail');
@@ -195,11 +227,22 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       const newResume = convertUploadResponseToResumeDocument(response.data, effectiveUserEmail);
       setResumes(prev => [...prev, newResume]);
       
-      // Set as active automatically
-      await setActiveResume(response.data.resumeId);
+      // Check if this is the first resume (backend sets it as active automatically)
+      const currentResumes = await aiApplyService.getUserResumes(effectiveUserEmail);
+      const activeResumeData = currentResumes.data.find((r: ResumeData) => r.is_active);
+      
+      if (activeResumeData && activeResumeData.id === response.data.resumeId) {
+        // This resume was set as active automatically (first resume)
+        const activeResume = convertToResumeDocument(activeResumeData, effectiveUserEmail);
+        setActiveResumeState(activeResume);
+        console.log('🔍 uploadResume first resume set as active automatically');
+      } else {
+        // This resume was not set as active (user already has resumes)
+        console.log('🔍 uploadResume resume added but not set as active');
+      }
       
       setStatus('idle');
-      alert(`Resume "${file.name}" uploaded successfully! Set as active and ready for processing.`);
+      alert(`Resume "${file.name}" uploaded successfully! ${activeResumeData?.id === response.data.resumeId ? 'Set as active and ready for processing.' : 'Please set it as active to enable processing.'}`);
       console.log('🔍 uploadResume completed successfully');
     } catch (error) {
       console.error('🔍 uploadResume error:', error);
@@ -253,13 +296,21 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     }, 2000); // Poll every 2 seconds
   }, []);
 
-  // Process a resume
+  // Process a resume (only active resumes can be processed)
   const processResume = useCallback(async (resumeId?: string) => {
     console.log('🔍 processResume called:', { resumeId, activeResumeId: activeResume?.id });
     const targetId = resumeId || activeResume?.id;
     if (!targetId) {
       console.log('🔍 processResume early return: no targetId');
       alert('Please select an active resume first');
+      return;
+    }
+
+    // Verify the resume is active
+    const targetResume = resumes.find(r => r.id === targetId);
+    if (!targetResume || !targetResume.is_active) {
+      console.log('🔍 processResume early return: resume not active');
+      alert('Only active resumes can be processed. Please set this resume as active first.');
       return;
     }
 
@@ -295,28 +346,51 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       return;
     }
 
+    // Confirm deletion
+    const confirmed = window.confirm('Are you sure you want to delete this resume? This action cannot be undone.');
+    if (!confirmed) {
+      console.log('🔍 deleteResume cancelled by user');
+      return;
+    }
+
     try {
       console.log('🔍 deleteResume calling API...');
       await aiApplyService.deleteResume(resumeId, effectiveUserEmail);
       console.log('🔍 deleteResume API call successful');
       
-      if (mountedRef.current) {
-        console.log('🔍 deleteResume updating local state...');
-        // Remove from local state
-        setResumes(prev => prev.filter(resume => resume.id !== resumeId));
-        
-        // Clear active resume if it was the deleted one
-        if (activeResume?.id === resumeId) {
-          setActiveResumeState(null);
-          setProcessingResults(null);
-          console.log('🔍 deleteResume cleared active resume');
-        }
-        console.log('🔍 deleteResume local state updated');
+      console.log('🔍 deleteResume updating local state...');
+      console.log('🔍 deleteResume current resumes before:', resumes.length, resumes.map(r => r.id));
+      
+      // Remove from local state immediately with functional update
+      setResumes(prev => {
+        const newResumes = prev.filter(resume => resume.id !== resumeId);
+        console.log('🔍 deleteResume filtered resumes:', { before: prev.length, after: newResumes.length });
+        console.log('🔍 deleteResume new resumes after:', newResumes.map(r => r.id));
+        return [...newResumes]; // Ensure new array reference for re-render
+      });
+      
+      // Force a re-render by updating with a small delay
+      setTimeout(() => {
+        setResumes(prev => [...prev]); // Force re-render with same array
+      }, 100);
+      
+      console.log('🔍 deleteResume state updated, checking re-render...');
+      
+      // Clear active resume if it was the deleted one
+      if (activeResume?.id === resumeId) {
+        setActiveResumeState(null);
+        setProcessingResults(null);
+        setStatus('idle');
+        console.log('🔍 deleteResume cleared active resume');
       }
+      
+      // Show success message
+      alert('Resume deleted successfully!');
+      console.log('🔍 deleteResume completed');
     } catch (error) {
       console.error('🔍 deleteResume error:', error);
       alert('Failed to delete resume: ' + (error as Error).message);
-      throw error;
+      // Don't throw error - let the component handle the cleanup
     }
   }, [resumes, activeResume, userEmail]);
 
@@ -430,12 +504,67 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     }
   }, []);
 
+  // AI Analysis Methods
+  const analyzeAestheticScore = useCallback(async (resumeText: string, resumeContent: string) => {
+    try {
+      return await aiApplyService.analyzeAestheticScore(resumeText, resumeContent);
+    } catch (error) {
+      console.error('Error analyzing aesthetic score:', error);
+      throw error;
+    }
+  }, []);
+
+  const analyzeSkills = useCallback(async (resumeText: string) => {
+    try {
+      return await aiApplyService.analyzeSkills(resumeText);
+    } catch (error) {
+      console.error('Error analyzing skills:', error);
+      throw error;
+    }
+  }, []);
+
+  const generateRecommendations = useCallback(async (resumeText: string, resumeSections: any[], currentSkills: any) => {
+    try {
+      return await aiApplyService.generateRecommendations(resumeText, resumeSections, currentSkills);
+    } catch (error) {
+      console.error('Error generating recommendations:', error);
+      throw error;
+    }
+  }, []);
+
+  const runAIAnalysis = useCallback(async (resumeText: string, resumeContent: string, resumeSections: any[]) => {
+    try {
+      const [aestheticResult, skillsResult, recommendationsResult] = await Promise.all([
+        analyzeAestheticScore(resumeText, resumeContent),
+        analyzeSkills(resumeText),
+        generateRecommendations(resumeText, resumeSections, {})
+      ]);
+
+      return {
+        aesthetic: aestheticResult,
+        skills: skillsResult,
+        recommendations: recommendationsResult
+      };
+    } catch (error) {
+      console.error('Error running AI analysis:', error);
+      throw error;
+    }
+  }, [analyzeAestheticScore, analyzeSkills, generateRecommendations]);
+
   const startAIAnalysis = useCallback(async (resumeId: string) => {
     // Fallback for development/testing when no authenticated user
     const effectiveUserEmail = userEmail || 'test@example.com';
     
     if (!effectiveUserEmail) {
       throw new Error('User email required for AI analysis');
+    }
+
+    // Verify the resume is active
+    const targetResume = resumes.find(r => r.id === resumeId);
+    if (!targetResume || !targetResume.is_active) {
+      console.log('🧠 startAIAnalysis early return: resume not active');
+      alert('Only active resumes can be analyzed. Please set this resume as active first.');
+      return;
     }
 
     try {
@@ -455,6 +584,16 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     }
   }, [userEmail, refreshResults]);
 
+  const checkIfNeedsProcessing = useCallback(async (userEmailParam: string) => {
+    try {
+      const result = await aiApplyService.checkIfNeedsProcessing(userEmailParam);
+      return result;
+    } catch (error) {
+      console.error('Error checking if needs processing:', error);
+      throw error;
+    }
+  }, []);
+
   // Load resumes when userEmail changes
   useEffect(() => {
     if (userEmail) {
@@ -468,7 +607,7 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     activeResume,
     processingResults,
     status,
-    currentStatus,
+    error,
     
     // Loading states
     loading,
@@ -484,6 +623,13 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     refreshResults,
     loadStatus,
     startAIAnalysis,
+    checkIfNeedsProcessing,
+    
+    // AI Analysis Actions
+    analyzeAestheticScore,
+    analyzeSkills,
+    generateRecommendations,
+    runAIAnalysis,
     
     // AI Apply Pipeline Actions
     getJobMatches,

@@ -4,12 +4,18 @@ import {
   chat,
   generateCoverLetter,
   matchJobs,
+  analyzeAestheticScore,
+  analyzeSkills,
+  generateRecommendations,
 } from '../services/ollamaService';
 import {
   ChatRequest,
   CoverLetterRequest,
   JobMatchRequest,
   ResumeAnalysisRequest,
+  AestheticScoreRequest,
+  SkillsAnalysisRequest,
+  AIRecommendationsRequest,
 } from '../types/ai';
 
 const router = Router();
@@ -75,6 +81,53 @@ router.post('/chat', async (req, res) => {
   } catch (error) {
     console.error('Error chatting', error);
     res.status(500).json({ error: 'Failed to process chat request' });
+  }
+});
+
+// AI Analysis Routes for Resume Processing
+
+router.post('/analyze-aesthetic-score', async (req, res) => {
+  try {
+    const payload: AestheticScoreRequest = req.body;
+    if (!payload?.resumeText || !payload?.resumeContent) {
+      return res.status(400).json({ error: 'resumeText and resumeContent are required' });
+    }
+
+    const result = await analyzeAestheticScore(payload);
+    res.json(result);
+  } catch (error) {
+    console.error('Error analyzing aesthetic score', error);
+    res.status(500).json({ error: 'Failed to analyze aesthetic score' });
+  }
+});
+
+router.post('/analyze-skills', async (req, res) => {
+  try {
+    const payload: SkillsAnalysisRequest = req.body;
+    if (!payload?.resumeText) {
+      return res.status(400).json({ error: 'resumeText is required' });
+    }
+
+    const result = await analyzeSkills(payload);
+    res.json(result);
+  } catch (error) {
+    console.error('Error analyzing skills', error);
+    res.status(500).json({ error: 'Failed to analyze skills' });
+  }
+});
+
+router.post('/generate-recommendations', async (req, res) => {
+  try {
+    const payload: AIRecommendationsRequest = req.body;
+    if (!payload?.resumeText) {
+      return res.status(400).json({ error: 'resumeText is required' });
+    }
+
+    const result = await generateRecommendations(payload);
+    res.json(result);
+  } catch (error) {
+    console.error('Error generating recommendations', error);
+    res.status(500).json({ error: 'Failed to generate recommendations' });
   }
 });
 

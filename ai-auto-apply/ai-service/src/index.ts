@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import aiRoutes from './routes/aiRoutes';
-import pdfRoutes from './routes/pdfRoutes';
+// import pdfRoutes from './routes/pdfRoutes'; // Temporarily disabled to fix DOMMatrix issue
 
 dotenv.config();
 
@@ -53,7 +53,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/ai', aiRoutes);
-app.use('/api/pdf', pdfRoutes);
+// app.use('/api/pdf', pdfRoutes); // Temporarily disabled to fix DOMMatrix issue
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('💥 [EXTREME][ERROR]', {

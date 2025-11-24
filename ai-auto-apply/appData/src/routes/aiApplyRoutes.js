@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { pool } from '../db.js';
+import userResumeStateService from '../services/userResumeStateService.js';
 
 // Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -58,18 +59,30 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'User email or ID is required' });
     }
 
-    // Start transaction
+    // Check resume limit (max 3 resumes per user) - only count active resumes
+    const resumeCount = await client.query(
+      'SELECT COUNT(*) FROM documents WHERE user_email = $1 AND is_active = true AND document_type = \'resume\'',
+      [userEmail]
+    );
+
+    if (parseInt(resumeCount.rows[0].count) >= 3) {
+      return res.status(400).json({ 
+        error: 'Maximum resume limit reached',
+        details: 'You can only have a maximum of 3 resumes. Please delete an existing resume before uploading a new one.'
+      });
+    }
+
     await client.query('BEGIN');
 
-    // Insert resume record into database
+    // Insert resume record into database (start as inactive)
     const resumeResult = await client.query(
       `INSERT INTO documents 
        (user_id, user_email, stored_filename, original_filename, file_path, file_size_bytes, mime_type, file_type, document_type, uploaded_at, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'resume', 'resume', CURRENT_TIMESTAMP, true) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'resume', 'resume', CURRENT_TIMESTAMP, false) 
        RETURNING *`,
       [
         primaryIdentifier, // Store as user_id for backward compatibility
-        userEmail || primaryIdentifier, // Store email if provided
+        userEmail, // Store email for primary identification
         file.filename,
         file.originalname,
         file.path,
@@ -80,13 +93,15 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
 
     const resume = resumeResult.rows[0];
 
-    // Set as active if it's the first resume
-    const resumeCount = await client.query(
-      'SELECT COUNT(*) FROM documents WHERE user_id = $1 AND is_active = true',
-      [userId]
+    // Check if user has any existing active resumes
+    const existingActiveResumes = await client.query(
+      'SELECT COUNT(*) FROM documents WHERE user_email = $1 AND is_active = true AND document_type = \'resume\'',
+      [userEmail]
     );
 
-    if (parseInt(resumeCount.rows[0].count) === 1) {
+    // If no active resumes exist, set this one as active
+    // Otherwise, keep it inactive (user must manually activate)
+    if (parseInt(existingActiveResumes.rows[0].count) === 0) {
       await client.query(
         'UPDATE documents SET is_active = true WHERE id = $1',
         [resume.id]
@@ -136,10 +151,11 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// Get all resumes for a user
+// Get all resumes for a user (including inactive if requested)
 router.get('/resumes/users/:userEmail', async (req, res) => {
   try {
     const { userEmail } = req.params;
+    const { include_inactive } = req.query;
 
     const result = await pool.query(
       `SELECT 
@@ -154,7 +170,7 @@ router.get('/resumes/users/:userEmail', async (req, res) => {
         END as processing_status
        FROM documents d
        LEFT JOIN document_processing_results dpr ON d.id = dpr.document_id
-       WHERE d.user_email = $1 AND d.is_active = true AND d.document_type = 'resume'
+       WHERE d.user_email = $1 AND d.document_type = 'resume' ${include_inactive === 'true' ? '' : 'AND d.is_active = true'}
        ORDER BY d.uploaded_at DESC`,
       [userEmail]
     );
@@ -233,25 +249,44 @@ router.post('/resumes/:resumeId/set-active', async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Deactivate all other resumes for this user (check both user_id and user_email for compatibility)
+    // Verify resume belongs to user and is active
+    const resumeCheck = await client.query(
+      'SELECT id FROM documents WHERE id = $1 AND user_email = $2 AND document_type = \'resume\'',
+      [resumeId, userEmail]
+    );
+
+    if (resumeCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    // Deactivate all other resumes for this user (email-based)
     await client.query(
       `UPDATE documents SET is_active = false 
-       WHERE (user_id = $1 OR user_email = $1) AND id != $2`,
-      [primaryIdentifier, resumeId]
+       WHERE user_email = $1 AND id != $2 AND document_type = 'resume'`,
+      [userEmail, resumeId]
     );
 
     // Activate the selected resume
     await client.query(
       `UPDATE documents SET is_active = true, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1 AND (user_id = $2 OR user_email = $2)`,
-      [resumeId, primaryIdentifier]
+       WHERE id = $1 AND user_email = $2`,
+      [resumeId, userEmail]
     );
+
+    // Clear persistent state to force reprocessing with new active resume
+    try {
+      await userResumeStateService.clearUserResumeState(primaryIdentifier);
+    } catch (stateError) {
+      console.error('Error clearing persistent state:', stateError);
+      // Don't fail the request, just log the error
+    }
 
     await client.query('COMMIT');
 
     res.json({
       success: true,
-      message: 'Resume set as active'
+      message: 'Resume set as active. AI analysis will be performed on this resume.'
     });
 
   } catch (error) {
@@ -278,14 +313,17 @@ router.post('/resumes/:resumeId/process', async (req, res) => {
       tables: { format: 'json' }
     };
 
-    // Get resume details
+    // Get resume details and validate it's active
     const resumeResult = await pool.query(
-      'SELECT * FROM documents WHERE id = $1',
+      'SELECT * FROM documents WHERE id = $1 AND document_type = \'resume\' AND is_active = true',
       [resumeId]
     );
 
     if (resumeResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Resume not found' });
+      return res.status(404).json({ 
+        error: 'Resume not found or not active',
+        details: 'Only active resumes can be processed. Please set a resume as active first.'
+      });
     }
 
     const resume = resumeResult.rows[0];
@@ -316,10 +354,23 @@ router.post('/resumes/:resumeId/process', async (req, res) => {
   }
 });
 
-// Get resume processing results
+// Get resume processing results (only for active resumes)
 router.get('/resumes/:resumeId/results', async (req, res) => {
   try {
     const { resumeId } = req.params;
+
+    // Verify resume exists and is active
+    const resumeCheck = await pool.query(
+      'SELECT id FROM documents WHERE id = $1 AND document_type = \'resume\' AND is_active = true',
+      [resumeId]
+    );
+
+    if (resumeCheck.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Resume not found or not active',
+        details: 'Only active resumes can be accessed. Please set a resume as active first.'
+      });
+    }
 
     // Get processing results
     const resultsResult = await pool.query(
@@ -359,6 +410,25 @@ router.get('/resumes/:resumeId/results', async (req, res) => {
 
     const analysis = analysisResult.rows[0] || null;
 
+    // Get user email to update persistent state
+    const documentResult = await pool.query(
+      'SELECT user_email FROM documents WHERE id = $1',
+      [resumeId]
+    );
+
+    if (documentResult.rows.length > 0 && documentResult.rows[0].user_email) {
+      // Update persistent state with processing results
+      try {
+        await userResumeStateService.updateUserResumeState(
+          documentResult.rows[0].user_email,
+          resumeId
+        );
+      } catch (stateError) {
+        console.error('Error updating persistent state:', stateError);
+        // Don't fail the request, just log the error
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -384,6 +454,8 @@ router.delete('/resumes/:resumeId', async (req, res) => {
     const { resumeId } = req.params;
     const { userEmail, userId } = req.body;
 
+    console.log('🗑️ Delete request received:', { resumeId, userEmail, userId });
+
     // Use email as primary identifier, fall back to userId for backward compatibility
     const primaryIdentifier = userEmail || userId;
     if (!primaryIdentifier) {
@@ -392,34 +464,79 @@ router.delete('/resumes/:resumeId', async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Soft delete resume (check both user_id and user_email for compatibility)
-    await client.query(
-      `UPDATE documents SET is_active = false, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1 AND (user_id = $2 OR user_email = $2)`,
-      [resumeId, primaryIdentifier]
+    // Get resume details before deletion (for file cleanup)
+    const resumeResult = await client.query(
+      'SELECT * FROM documents WHERE id = $1 AND user_email = $2',
+      [resumeId, userEmail]
     );
 
-    // Clean up processing results
-    await client.query(
-      'DELETE FROM document_processing_results WHERE document_id = $1',
-      [resumeId]
-    );
+    console.log('🗑️ Resume query result:', { found: resumeResult.rows.length, rows: resumeResult.rows });
 
-    await client.query(
-      'DELETE FROM resume_analysis WHERE document_id = $1',
-      [resumeId]
-    );
+    if (resumeResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    const resume = resumeResult.rows[0];
+    console.log('🗑️ Deleting resume:', { id: resume.id, filename: resume.original_filename });
+
+    // Delete file from filesystem
+    if (resume.file_path) {
+      try {
+        await fs.unlink(resume.file_path);
+        console.log('🗑️ Deleted resume file:', resume.file_path);
+      } catch (fileError) {
+        console.warn('🗑️ Failed to delete resume file:', fileError);
+        // Continue with database cleanup even if file deletion fails
+      }
+    }
+
+    // Delete screenshot file if exists
+    if (resume.screenshot_path) {
+      try {
+        await fs.unlink(resume.screenshot_path);
+        console.log('🗑️ Deleted screenshot file:', resume.screenshot_path);
+      } catch (fileError) {
+        console.warn('🗑️ Failed to delete screenshot file:', fileError);
+      }
+    }
+
+    console.log('🗑️ Starting database cleanup...');
+
+    // Clean up all related data
+    await client.query('DELETE FROM document_processing_queue WHERE document_id = $1', [resumeId]);
+    console.log('🗑️ Deleted from document_processing_queue');
+    
+    await client.query('DELETE FROM document_processing_results WHERE document_id = $1', [resumeId]);
+    console.log('🗑️ Deleted from document_processing_results');
+    
+    await client.query('DELETE FROM resume_analysis WHERE document_id = $1', [resumeId]);
+    console.log('🗑️ Deleted from resume_analysis');
+    
+    // Hard delete the resume record
+    const deleteResult = await client.query('DELETE FROM documents WHERE id = $1 AND user_email = $2', [resumeId, userEmail]);
+    console.log('🗑️ Deleted from documents:', { rowCount: deleteResult.rowCount });
+
+    // Clear persistent state if this was the active resume
+    try {
+      await userResumeStateService.clearUserResumeState(userEmail);
+      console.log('🗑️ Cleared persistent state');
+    } catch (stateError) {
+      console.error('🗑️ Error clearing persistent state:', stateError);
+      // Don't fail the request, just log the error
+    }
 
     await client.query('COMMIT');
+    console.log('🗑️ Delete transaction completed successfully');
 
     res.json({
       success: true,
-      message: 'Resume deleted successfully'
+      message: 'Resume and all associated data deleted successfully'
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error deleting resume:', error);
+    console.error('🗑️ Error deleting resume:', error);
     res.status(500).json({
       error: 'Failed to delete resume',
       details: error.message
@@ -454,6 +571,73 @@ router.get('/status', async (req, res) => {
     console.error('Error getting status:', error);
     res.status(500).json({
       error: 'Failed to get status',
+      details: error.message
+    });
+  }
+});
+
+// Get user's persistent resume processing state
+router.get('/resumes/state/:userEmail', async (req, res) => {
+  try {
+    const { userEmail } = req.params;
+
+    const state = await userResumeStateService.getUserResumeState(userEmail);
+    
+    res.json({
+      success: true,
+      data: state
+    });
+
+  } catch (error) {
+    console.error('Error getting user resume state:', error);
+    res.status(500).json({
+      error: 'Failed to get user resume state',
+      details: error.message
+    });
+  }
+});
+
+// Get processing results from persistent state
+router.get('/resumes/results/persistent/:userEmail', async (req, res) => {
+  try {
+    const { userEmail } = req.params;
+
+    const results = await userResumeStateService.getProcessingResults(userEmail);
+    
+    if (!results) {
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
+
+    res.json(results);
+
+  } catch (error) {
+    console.error('Error getting persistent processing results:', error);
+    res.status(500).json({
+      error: 'Failed to get processing results',
+      details: error.message
+    });
+  }
+});
+
+// Check if user needs to process resume
+router.get('/resumes/needs-processing/:userEmail', async (req, res) => {
+  try {
+    const { userEmail } = req.params;
+
+    const status = await userResumeStateService.needsProcessing(userEmail);
+    
+    res.json({
+      success: true,
+      data: status
+    });
+
+  } catch (error) {
+    console.error('Error checking processing status:', error);
+    res.status(500).json({
+      error: 'Failed to check processing status',
       details: error.message
     });
   }

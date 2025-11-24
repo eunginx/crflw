@@ -85,78 +85,103 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         console.log('Loading resumes for user:', userId);
       }
       
-      // Import DocumentManagementService locally to avoid circular dependency
-      const { DocumentManagementService } = await import('../services/documentManagementService');
+      // Import aiApplyService for getting user resumes
+      const { aiApplyService } = await import('../services/aiApplyService');
       
-      // Get all documents for the user - same as original
-      const userDocuments = await DocumentManagementService.getUserDocuments(userId);
+      // Get all resumes for the user
+      const userResumes = await aiApplyService.getUserResumes(userId);
       
-      if (userDocuments.length === 0 && process.env.NODE_ENV === 'development') {
-        console.log('No documents found for user - this is normal for first-time users');
+      if (userResumes.data.length === 0 && process.env.NODE_ENV === 'development') {
+        console.log('No resumes found for user - this is normal for first-time users');
       }
       
-      setResumes(userDocuments);
+      // Convert ResumeData to ResumeDocument format
+      const convertedResumes = userResumes.data.map(resume => ({
+        ...resume,
+        processing_status: resume.processing_status as "completed" | "pending" | "error" | "processing",
+        filename: resume.filename,
+        file_size: resume.file_size
+      }));
+      
+      setResumes(convertedResumes);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('📄 Resumes loaded:', userDocuments.length);
-        console.log('📄 Resume data:', userDocuments);
+        console.log('📄 Resumes loaded:', userResumes.data.length);
+        console.log('📄 Resume data:', userResumes.data);
       }
       
-      // Get active document - same as original
-      const active = await DocumentManagementService.getActiveDocument(userId);
-      setActiveResume(active);
-      
-      // If there's processed data, get the processing results - same as original
-      if (active) {
-        const processingResults = await DocumentManagementService.getDocumentProcessingResults(active.id);
-        if (processingResults) {
-          setProcessedResume({
-            text: processingResults.extractedText,
-            textLength: processingResults.textLength,
-            filename: active.original_filename,
-            processedAt: processingResults.processedAt,
-            screenshotPath: processingResults.screenshotPath,
-            textFilePath: processingResults.textFilePath,
-            metadata: {
-              totalPages: processingResults.pdfTotalPages || 0,
-              title: processingResults.pdfTitle,
-              author: processingResults.pdfAuthor,
-              creator: processingResults.pdfCreator,
-              producer: processingResults.pdfProducer
+      // Get active resume
+      try {
+        const activeResumeResponse = await aiApplyService.getActiveResume(userId);
+        if (activeResumeResponse.data) {
+          // Convert ResumeData to ResumeDocument format
+          const convertedActiveResume = {
+            ...activeResumeResponse.data,
+            processing_status: activeResumeResponse.data.processing_status as "completed" | "pending" | "error" | "processing",
+            filename: activeResumeResponse.data.filename,
+            file_size: activeResumeResponse.data.file_size
+          };
+          
+          setActiveResume(convertedActiveResume);
+          
+          // Get processing results for active resume
+          const processingResults = await aiApplyService.getResumeResults(activeResumeResponse.data.id);
+          if (processingResults.data) {
+            const results = processingResults.data;
+            setProcessedResume({
+              text: results.extracted_text || '',
+              textLength: results.text_length || 0,
+              filename: activeResumeResponse.data.original_filename,
+              processedAt: results.processed_at || '',
+              screenshotPath: results.screenshot_path,
+              textFilePath: results.text_file_path,
+              metadata: {
+                totalPages: results.num_pages || 0,
+                title: results.pdf_title || undefined,
+                author: results.pdf_author || undefined,
+                creator: results.pdf_creator || undefined,
+                producer: results.pdf_producer || undefined
+              }
+            });
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log('📄 Processed resume set with screenshot path:', results.screenshot_path);
             }
-          });
 
-          if (process.env.NODE_ENV === 'development') {
-            console.log('📄 Processed resume set with screenshot path:', processingResults.screenshotPath);
+            // Load screenshot if available
+            if (results.screenshot_path) {
+              await loadScreenshot();
+            }
+          } else {
+            setProcessedResume(null);
+            setScreenshotUrl(null);
           }
-
-          // Load screenshot if available
-          if (processingResults.screenshotPath) {
-            await loadScreenshot();
-          }
-        } else {
-          setProcessedResume(null);
-          setScreenshotUrl(null);
         }
+      } catch (activeError) {
+        // It's okay if there's no active resume
+        if (process.env.NODE_ENV === 'development') {
+          console.log('No active resume found:', activeError);
+        }
+        setActiveResume(null);
       }
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('Documents loaded:', userDocuments.length);
-        console.log('Active document:', active?.original_filename);
+        console.log('Resumes loaded:', userResumes.data.length);
+        console.log('Active resume:', activeResume?.original_filename);
       }
       
     } catch (error) {
       // Combine error logging paths
       if (process.env.NODE_ENV === 'development') {
-        console.error('Error loading documents:', error);
+        console.error('Error loading resumes:', error);
       }
       
       // Don't show alert for first-time users - this is normal behavior
       if (error instanceof Error && !error.message.includes('404') && mountedRef.current) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('Actual error loading documents (not 404):', error);
+          console.error('Actual error loading resumes (not 404):', error);
         }
-        alert('Unable to connect to document service. Please check your connection and try again.');
+        alert('Unable to connect to resume service. Please check your connection and try again.');
       }
     } finally {
       if (mountedRef.current) {
@@ -208,31 +233,19 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         console.log('Uploading document:', file.name);
       }
       
-      // Import DocumentManagementService locally to avoid circular dependency
-      const { DocumentManagementService } = await import('../services/documentManagementService');
+      // Import aiApplyService for resume upload
+      const { aiApplyService } = await import('../services/aiApplyService');
       
       // Validate PDF file
       if (file.type !== 'application/pdf') {
         throw new Error('Invalid PDF file');
       }
 
-      // Upload document using the same approach as the original
-      const uploadResult = await DocumentManagementService.uploadDocument(
-        file,
-        userId,
-        userEmail,
-        'resume',
-        options || {
-          text: {}, // Extract full text
-          info: { parsePageInfo: true }, // Get metadata
-          screenshots: { scale: 1.5, first: 1 }, // Generate preview
-          images: { imageThreshold: 50 }, // Extract images
-          tables: { format: 'json' } // Extract tables
-        }
-      );
+      // Upload resume using aiApplyService (which handles the 3-resume limit)
+      const uploadResult = await aiApplyService.uploadResume(file, userId || '', userEmail);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('Document uploaded successfully:', uploadResult.documentId);
+        console.log('Document uploaded successfully:', uploadResult.data.resumeId);
       }
       
       // Reset loading guard to allow refresh
@@ -249,7 +262,12 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         console.error('Error uploading resume:', error);
       }
       if (mountedRef.current) {
-        alert('Failed to upload resume: ' + (error as Error).message);
+        const errorMessage = (error as Error).message;
+        if (errorMessage.includes('Maximum resume limit reached')) {
+          alert('You can only have a maximum of 3 resumes. Please delete an existing resume before uploading a new one.');
+        } else {
+          alert('Failed to upload resume: ' + errorMessage);
+        }
       }
       throw error;
     } finally {
@@ -268,51 +286,29 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         console.log('Setting active document:', documentId);
       }
       
-      // Import DocumentManagementService locally to avoid circular dependency
-      const { DocumentManagementService } = await import('../services/documentManagementService');
+      // Import aiApplyService for setting active resume
+      const { aiApplyService } = await import('../services/aiApplyService');
       
-      const success = await DocumentManagementService.setActiveDocument(userId, documentId);
+      await aiApplyService.setActiveResume(documentId, userId || '');
       
-      if (success && mountedRef.current) {
-        // Update local state
-        const document = resumes.find(d => d.id === documentId);
-        if (document) {
-          setActiveResume(document);
-          setResumes(resumes.map(d => ({ ...d, is_active: d.id === documentId })));
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Active document set:', document.original_filename);
-          }
-          
-          // Load processed data for the new active document
-          const processingResults = await DocumentManagementService.getDocumentProcessingResults(documentId);
-          if (processingResults) {
-            setProcessedResume({
-              text: processingResults.extractedText,
-              textLength: processingResults.textLength,
-              filename: document.original_filename,
-              processedAt: processingResults.processedAt,
-              screenshotPath: processingResults.screenshotPath,
-              textFilePath: processingResults.textFilePath,
-              metadata: {
-                totalPages: processingResults.pdfTotalPages || 0,
-                title: processingResults.pdfTitle,
-                author: processingResults.pdfAuthor,
-                creator: processingResults.pdfCreator,
-                producer: processingResults.pdfProducer
-              }
-            });
-
-            // Load screenshot if available
-            if (processingResults.screenshotPath) {
-              await loadScreenshot();
-            }
-          } else {
-            setProcessedResume(null);
-            setScreenshotUrl(null);
-          }
+      // Update local state
+      const document = resumes.find(d => d.id === documentId);
+      if (document) {
+        setActiveResume(document);
+        setResumes(resumes.map(d => ({ ...d, is_active: d.id === documentId })));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Active document set:', document.original_filename);
         }
-      } else {
-        throw new Error('Failed to set active document');
+        
+        // Clear processed data to force reprocessing with new active resume
+        setProcessedResume(null);
+        setParsedResume(null);
+        setScreenshotUrl(null);
+        setUnifiedResult(null);
+        
+        if (mountedRef.current) {
+          alert('Resume set as active. AI analysis will be performed on this resume.');
+        }
       }
       
     } catch (error) {
@@ -320,7 +316,7 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         console.error('Error setting active document:', error);
       }
       if (mountedRef.current) {
-        alert('Failed to set active document');
+        alert('Failed to set active document: ' + (error as Error).message);
       }
       throw error;
     }
@@ -331,38 +327,34 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
     const document = resumes.find(d => d.id === documentId);
     if (!document) return;
 
-    const confirmed = window.confirm(`Are you sure you want to delete ${document.original_filename}?`);
+    const confirmed = window.confirm(`Are you sure you want to delete "${document.original_filename}"? This will permanently delete the resume file and all associated analysis data.`);
     if (!confirmed) return;
 
     try {
       console.log('Deleting document:', document.original_filename);
       
-      // Import DocumentManagementService locally to avoid circular dependency
-      const { DocumentManagementService } = await import('../services/documentManagementService');
+      // Import aiApplyService for resume deletion
+      const { aiApplyService } = await import('../services/aiApplyService');
       
-      const success = await DocumentManagementService.deleteDocument(documentId);
+      await aiApplyService.deleteResume(documentId, userId || '');
       
-      if (success) {
-        // Update local state
-        setResumes(resumes.filter(d => d.id !== documentId));
-        if (activeResume?.id === documentId) {
-          setActiveResume(null);
-          setProcessedResume(null);
-          setParsedResume(null);
-          setScreenshotUrl(null);
-          setUnifiedResult(null);
-        }
-        console.log('Document deleted successfully');
-        alert('Document deleted successfully!');
-      } else {
-        throw new Error('Failed to delete document');
+      // Update local state
+      setResumes(resumes.filter(d => d.id !== documentId));
+      if (activeResume?.id === documentId) {
+        setActiveResume(null);
+        setProcessedResume(null);
+        setParsedResume(null);
+        setScreenshotUrl(null);
+        setUnifiedResult(null);
       }
+      console.log('Document deleted successfully');
+      alert('Resume and all associated data deleted successfully!');
     } catch (error) {
       console.error('Error deleting document:', error);
       alert('Failed to delete document: ' + (error as Error).message);
       throw error;
     }
-  }, [resumes, activeResume]);
+  }, [resumes, activeResume, userId]);
 
   // Process a resume - simplified like the original
   const processResume = useCallback(async (documentId?: string) => {

@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const AI_SERVICE_BASE_URL = process.env.REACT_APP_AI_SERVICE_URL || 'http://localhost:9000';
 
 export interface ResumeUploadResponse {
   success: boolean;
@@ -16,13 +17,14 @@ export interface ResumeUploadResponse {
 
 export interface ResumeData {
   id: string;
+  user_id: string;
   filename: string;
   original_filename: string;
   file_size: number;
   mime_type: string;
-  upload_date: string;
+  upload_date: string; // Changed from uploaded_at to match API
   is_active: boolean;
-  updated_at: string;
+  updated_at?: string;
   processing_status?: string;
 }
 
@@ -143,7 +145,7 @@ class AIApplyService {
   async getUserResumes(userId: string): Promise<ResumeListResponse> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/ai-apply/resumes/users/${userId}`
+        `${API_BASE_URL}/api/ai-apply/resumes/users/${userId}?include_inactive=true`
       );
 
       return response.data;
@@ -245,16 +247,26 @@ class AIApplyService {
   /**
    * Delete a resume
    */
-  async deleteResume(resumeId: string, userId: string): Promise<{ success: boolean; message: string }> {
+  async deleteResume(resumeId: string, userEmail: string): Promise<{ success: boolean; message: string }> {
     try {
+      console.log('🗑️ Deleting resume:', { resumeId, userEmail });
+      
       const response = await axios.delete(
         `${API_BASE_URL}/api/ai-apply/resumes/${resumeId}`,
-        { data: { userId } }
+        { data: { userEmail } }
       );
-
+      
+      console.log('🗑️ Resume delete successful:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error deleting resume:', error);
+      console.error('🗑️ Error deleting resume:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('🗑️ Delete error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
+      }
       throw new Error(
         axios.isAxiosError(error)
           ? error.response?.data?.error || 'Failed to delete resume'
@@ -407,36 +419,213 @@ class AIApplyService {
    */
   async startAIAnalysis(documentId: string): Promise<any> {
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/ai/analyze-resume`,
-        { documentId }
+      // First get the resume processing results to extract the text
+      const resultsResponse = await axios.get(
+        `${API_BASE_URL}/api/ai-apply/resumes/${documentId}/results`
       );
 
-      return response.data;
+      const processingResults = resultsResponse.data?.data;
+      
+      if (!processingResults) {
+        throw new Error('No resume processing results found. Please ensure the resume has been processed first.');
+      }
+
+      if (!processingResults.extracted_text) {
+        throw new Error('No resume text found for analysis. Please ensure the resume has been processed successfully.');
+      }
+
+      // Run comprehensive AI analysis
+      const [aestheticResult, skillsResult, recommendationsResult] = await Promise.all([
+        this.analyzeAestheticScore(processingResults.extracted_text, JSON.stringify(processingResults)),
+        this.analyzeSkills(processingResults.extracted_text),
+        this.generateRecommendations(processingResults.extracted_text, [], {})
+      ]);
+
+      return {
+        aesthetic: aestheticResult,
+        skills: skillsResult,
+        recommendations: recommendationsResult
+      };
     } catch (error) {
       console.error('Failed to start AI analysis:', error);
       if (axios.isAxiosError(error)) {
-        throw new Error(
-          error.response?.data?.error || 'Failed to start AI analysis'
-        );
+        const errorMessage = error.response?.data?.error || error.message || 'Failed to start AI analysis';
+        throw new Error(errorMessage);
       }
       throw new Error('Network error while starting AI analysis');
     }
   }
 
   /**
-   * Check if the service is healthy
+   * Get user's persistent resume processing state
    */
-  async healthCheck(): Promise<{ service: string; status: string; timestamp: string }> {
+  async getUserResumeState(userEmail: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/ai-apply/health`
+        `${API_BASE_URL}/api/ai-apply/resumes/state/${encodeURIComponent(userEmail)}`
       );
 
       return response.data;
     } catch (error) {
-      console.error('Health check failed:', error);
-      throw new Error('Service unavailable');
+      console.error('Error getting user resume state:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to get user resume state'
+          : 'Network error while fetching user resume state'
+      );
+    }
+  }
+
+  /**
+   * Get processing results from persistent state
+   */
+  async getPersistentProcessingResults(userEmail: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/ai-apply/resumes/results/persistent/${encodeURIComponent(userEmail)}`
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error getting persistent processing results:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to get processing results'
+          : 'Network error while fetching processing results'
+      );
+    }
+  }
+
+  /**
+   * Check if user needs to process their resume
+   */
+  async checkIfNeedsProcessing(userEmail: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/ai-apply/resumes/needs-processing/${encodeURIComponent(userEmail)}`
+      );
+
+      return response.data;
+    } catch (error) {
+      console.error('Error checking processing status:', error);
+      throw new Error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.error || 'Failed to check processing status'
+          : 'Network error while checking processing status'
+      );
+    }
+  }
+
+  /**
+   * Analyze aesthetic score of resume
+   */
+  async analyzeAestheticScore(resumeText: string, resumeContent: string): Promise<any> {
+    try {
+      console.log('🎨 CALLING AI SERVICE FOR AESTHETIC SCORE');
+      console.log('AI Service URL:', AI_SERVICE_BASE_URL);
+      console.log('Resume Text Length:', resumeText?.length || 0);
+      
+      const response = await axios.post(
+        `${AI_SERVICE_BASE_URL}/api/ai/analyze-aesthetic-score`,
+        {
+          resumeText,
+          resumeContent
+        }
+      );
+      
+      console.log('🎨 AI SERVICE RESPONSE:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ AI SERVICE ERROR (Aesthetic Score):', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
+        throw new Error(
+          error.response?.data?.error || 'Failed to analyze aesthetic score'
+        );
+      }
+      throw new Error('Network error while analyzing aesthetic score');
+    }
+  }
+
+  /**
+   * Analyze skills from resume text
+   */
+  async analyzeSkills(resumeText: string): Promise<any> {
+    try {
+      console.log('🔧 CALLING AI SERVICE FOR SKILLS ANALYSIS');
+      console.log('AI Service URL:', AI_SERVICE_BASE_URL);
+      console.log('Resume Text Length:', resumeText?.length || 0);
+      
+      const response = await axios.post(
+        `${AI_SERVICE_BASE_URL}/api/ai/analyze-skills`,
+        {
+          resumeText
+        }
+      );
+      
+      console.log('🔧 AI SERVICE RESPONSE:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ AI SERVICE ERROR (Skills Analysis):', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
+        throw new Error(
+          error.response?.data?.error || 'Failed to analyze skills'
+        );
+      }
+      throw new Error('Network error while analyzing skills');
+    }
+  }
+
+  /**
+   * Generate recommendations for resume improvement
+   */
+  async generateRecommendations(resumeText: string, resumeSections: any[], currentSkills: any): Promise<any> {
+    try {
+      console.log('💡 CALLING AI SERVICE FOR RECOMMENDATIONS');
+      console.log('AI Service URL:', AI_SERVICE_BASE_URL);
+      console.log('Resume Text Length:', resumeText?.length || 0);
+      console.log('Resume Sections:', resumeSections);
+      console.log('Current Skills:', currentSkills);
+      
+      const response = await axios.post(
+        `${AI_SERVICE_BASE_URL}/api/ai/generate-recommendations`,
+        {
+          resumeText,
+          resumeSections,
+          currentSkills
+        }
+      );
+      
+      console.log('💡 AI SERVICE RESPONSE:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ AI SERVICE ERROR (Recommendations):', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
+        throw new Error(
+          error.response?.data?.error || 'Failed to generate recommendations'
+        );
+      }
+      throw new Error('Network error while generating recommendations');
     }
   }
 }

@@ -44,9 +44,9 @@ export class ResumeOrchestratorService {
         id: uploadResult.documentId,
         user_id: userId,
         original_filename: file.name,
-        uploaded_at: new Date().toISOString(),
+        upload_date: new Date().toISOString(),
         is_active: false,
-        status: 'pending'
+        processing_status: 'pending'
       };
 
       // Step 3: Process document and get unified result
@@ -199,8 +199,8 @@ export class ResumeOrchestratorService {
           
           return { 
             ...doc, 
-            status: doc.processing_status === 'completed' ? 'processed' : 
-                   doc.processing_status === 'failed' ? 'error' : 'pending' as "processed" | "pending" | "error",
+            upload_date: doc.uploaded_at, // Add upload_date field from uploaded_at
+            processing_status: doc.processing_status as "completed" | "pending" | "error" | "processing",
             processed 
           };
         })
@@ -273,7 +273,20 @@ export class ResumeOrchestratorService {
    * Get active resume for user
    */
   static async getActiveResume(userId: string): Promise<ResumeDocument | null> {
-    return await DocumentManagementService.getActiveDocument(userId);
+    const document = await DocumentManagementService.getActiveDocument(userId);
+    if (!document) return null;
+    
+    // Convert Document to ResumeDocument format
+    return {
+      ...document,
+      upload_date: document.uploaded_at, // Add upload_date field
+      processing_status: document.processing_status as "completed" | "pending" | "error" | "processing",
+      filename: document.original_filename, // Map filename field
+      file_size: document.file_size_bytes, // Map file_size field
+      mime_type: document.file_type, // Map mime_type field
+      updated_at: document.uploaded_at, // Use uploaded_at as updated_at
+      processed_at: document.processing_status === 'completed' ? document.uploaded_at : undefined
+    };
   }
 
   /**

@@ -18,6 +18,20 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   strengths,
   improvements
 }) => {
+  // Debug logging
+  console.log('🔍 RecommendationsCard Data:', {
+    recommendations: recommendations?.length || 0,
+    strengths: strengths?.length || 0,
+    improvements: improvements?.length || 0,
+    recommendationsData: recommendations,
+    strengthsData: strengths,
+    improvementsData: improvements
+  });
+
+  // Ensure arrays are valid and filter out empty items
+  const validRecommendations = Array.isArray(recommendations) ? recommendations.filter(rec => rec && rec.description && rec.description.trim()) : [];
+  const validStrengths = Array.isArray(strengths) ? strengths.filter(strength => strength && strength.trim()) : [];
+  const validImprovements = Array.isArray(improvements) ? improvements.filter(improvement => improvement && improvement.trim()) : [];
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
@@ -45,16 +59,16 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   };
 
   const allRecommendations = [
-    ...recommendations.map(rec => ({
+    ...validRecommendations.map(rec => ({
       type: 'recommendation' as const,
-      title: rec.category,
+      title: rec.category || 'Recommendation',
       description: rec.description,
-      priority: rec.priority,
-      icon: getPriorityIcon(rec.priority),
-      color: getPriorityColor(rec.priority),
+      priority: rec.priority || 'medium',
+      icon: getPriorityIcon(rec.priority || 'medium'),
+      color: getPriorityColor(rec.priority || 'medium'),
       examples: rec.examples
     })),
-    ...strengths.slice(0, 3).map((strength, index) => ({
+    ...validStrengths.slice(0, 3).map((strength, index) => ({
       type: 'strength' as const,
       title: 'Strength',
       description: strength,
@@ -63,7 +77,7 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
       color: 'bg-green-50 text-green-600 border-green-200',
       examples: undefined
     })),
-    ...improvements.slice(0, 3).map((improvement, index) => ({
+    ...validImprovements.slice(0, 3).map((improvement, index) => ({
       type: 'improvement' as const,
       title: 'Improvement',
       description: improvement,
@@ -77,6 +91,15 @@ const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
   const highPriorityCount = allRecommendations.filter(r => r.priority === 'high').length;
   const mediumPriorityCount = allRecommendations.filter(r => r.priority === 'medium').length;
   const lowPriorityCount = allRecommendations.filter(r => r.priority === 'low').length;
+
+  // Debug final counts
+  console.log('🔍 Final Counts:', {
+    total: allRecommendations.length,
+    high: highPriorityCount,
+    medium: mediumPriorityCount,
+    low: lowPriorityCount,
+    allItems: allRecommendations.map(r => ({ type: r.type, priority: r.priority, description: r.description.substring(0, 50) }))
+  });
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ResumeDocument } from '../../types/resume';
 
 interface ResumeListProps {
@@ -22,14 +22,27 @@ const ResumeList: React.FC<ResumeListProps> = ({
   loading,
   processing
 }) => {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'Unknown date';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error, 'Input:', dateString);
+      return 'Invalid Date';
+    }
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -37,6 +50,15 @@ const ResumeList: React.FC<ResumeListProps> = ({
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleDelete = async (resumeId: string) => {
+    setDeletingId(resumeId);
+    try {
+      await onDelete(resumeId);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -59,24 +81,24 @@ const ResumeList: React.FC<ResumeListProps> = ({
                 <div>
                   <h4 className="font-medium text-gray-900">{resume.original_filename}</h4>
                   <p className="text-sm text-gray-500">
-                    Uploaded {formatDate(resume.uploaded_at)} • {formatFileSize(resume.file_size)}
+                    Uploaded {formatDate(resume.upload_date)} • {formatFileSize(resume.file_size)}
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  resume.status === 'processed' 
+                  resume.processing_status === 'completed' 
                     ? 'bg-green-100 text-green-800'
-                    : resume.status === 'processing'
+                    : resume.processing_status === 'processing'
                     ? 'bg-yellow-100 text-yellow-800'
-                    : resume.status === 'error'
+                    : resume.processing_status === 'error'
                     ? 'bg-red-100 text-red-800'
                     : 'bg-gray-100 text-gray-800'
                 }`}>
-                  {resume.status === 'processed' ? 'Processed' :
-                   resume.status === 'processing' ? 'Processing' :
-                   resume.status === 'error' ? 'Error' : 'Pending'}
+                  {resume.processing_status === 'completed' ? 'Processed' :
+                   resume.processing_status === 'processing' ? 'Processing' :
+                   resume.processing_status === 'error' ? 'Error' : 'Pending'}
                 </span>
                 
                 {activeResume?.id === resume.id && (
@@ -98,7 +120,7 @@ const ResumeList: React.FC<ResumeListProps> = ({
                 </button>
               )}
               
-              {activeResume?.id === resume.id && resume.status !== 'processing' && (
+              {activeResume?.id === resume.id && resume.processing_status !== 'processing' && (
                 <>
                   <button
                     onClick={() => onProcess(resume.id)}
@@ -108,7 +130,7 @@ const ResumeList: React.FC<ResumeListProps> = ({
                     {processing ? 'Processing...' : 'Parse PDF'}
                   </button>
                   
-                  {resume.status === 'processed' && (
+                  {resume.processing_status === 'completed' && (
                     <button
                       onClick={() => onAIAnalysis(resume.id)}
                       disabled={processing}
@@ -121,11 +143,11 @@ const ResumeList: React.FC<ResumeListProps> = ({
               )}
               
               <button
-                onClick={() => onDelete(resume.id)}
-                disabled={loading || processing}
+                onClick={() => handleDelete(resume.id)}
+                disabled={loading || processing || deletingId === resume.id}
                 className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Delete
+                {deletingId === resume.id ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

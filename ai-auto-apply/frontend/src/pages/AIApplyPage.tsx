@@ -21,9 +21,65 @@ const AIApplyPage: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [needsProcessing, setNeedsProcessing] = useState(true); // Default to true for safety
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // Default to false - requires user action
+  const [analysisCompleted, setAnalysisCompleted] = useState(false); // Track if analysis was done for current resume
 
   // Use the new AI Apply manager hook (must be called before early returns)
   const aiApplyManager = useAIApplyManager(currentUser?.email || '');
+
+  // Check if user needs to process resume
+  useEffect(() => {
+    const checkProcessingStatus = async () => {
+      if (currentUser?.email && aiApplyManager.activeResume) {
+        try {
+          const status = await aiApplyManager.checkIfNeedsProcessing(currentUser.email);
+          setNeedsProcessing(status.data.needsProcessing);
+          console.log('🔍 Processing status updated:', status.data);
+        } catch (error) {
+          console.error('Error checking processing status:', error);
+          // If there are processing results, assume no processing needed
+          setNeedsProcessing(!aiApplyManager.processingResults);
+        }
+      }
+    };
+
+    checkProcessingStatus();
+  }, [currentUser, aiApplyManager.activeResume, aiApplyManager.processingResults]);
+
+  // Manual AI analysis function
+  const handleAnalyzeResume = async () => {
+    if (!aiApplyManager.processingResults) {
+      setError('Please process your resume first before analyzing.');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      console.log('🧠 Starting AI analysis...');
+      const analysisResults = await aiApplyManager.runAIAnalysis(
+        aiApplyManager.processingResults.extracted_text || '',
+        JSON.stringify(aiApplyManager.processingResults),
+        [] // Resume sections would be extracted from processing results
+      );
+      setAiAnalysis(analysisResults);
+      setAnalysisCompleted(true);
+      console.log('🧠 AI analysis completed:', analysisResults);
+    } catch (error) {
+      console.error('Error running AI analysis:', error);
+      setError('Failed to analyze resume. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Reset analysis state when resume changes
+  useEffect(() => {
+    setAiAnalysis(null);
+    setAnalysisCompleted(false);
+    setIsAnalyzing(false);
+  }, [aiApplyManager.activeResume?.id]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -230,16 +286,37 @@ const AIApplyPage: React.FC = () => {
       </div>
 
       {/* PDF Processing Section */}
-      {aiApplyManager.activeResume && !aiApplyManager.processingResults && (
+      {aiApplyManager.activeResume && !aiApplyManager.processingResults && needsProcessing && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Resume Processing</h3>
           <p className="text-gray-600 mb-4">Click "Parse PDF" to extract text and metadata from your resume.</p>
           <button
-            onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id)}
+            onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id || '')}
             disabled={aiApplyManager.processing}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {aiApplyManager.processing ? 'Processing...' : 'Parse PDF'}
+          </button>
+        </div>
+      )}
+
+      {/* Show when processing is up to date */}
+      {aiApplyManager.activeResume && !needsProcessing && !aiApplyManager.processingResults && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Resume Processing</h3>
+          <div className="flex items-center gap-3 text-green-600">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="font-medium">Resume Already Processed</p>
+              <p className="text-sm text-gray-600">Your resume has been parsed and is ready to use.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id || '')}
+            disabled={aiApplyManager.processing}
+            className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {aiApplyManager.processing ? 'Processing...' : 'Re-parse PDF'}
           </button>
         </div>
       )}
@@ -253,7 +330,7 @@ const AIApplyPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <DocumentInfoCard
               filename={aiApplyManager.activeResume?.file_path || ''}
-              uploadedAt={aiApplyManager.activeResume?.uploaded_at || ''}
+              uploadedAt={aiApplyManager.activeResume?.upload_date || ''}
               fileSize={aiApplyManager.activeResume?.file_size || 0}
               originalFilename={aiApplyManager.activeResume?.original_filename || ''}
             />
@@ -267,60 +344,95 @@ const AIApplyPage: React.FC = () => {
             />
           </div>
 
-          {/* Extracted Text */}
-          <ExtractedTextCard
-            text={aiApplyManager.processingResults.extracted_text}
-            textLength={aiApplyManager.processingResults.text_length}
-            filename={aiApplyManager.activeResume?.original_filename}
-          />
+          {/* Extracted Text & Resume Sections Grouped */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <ExtractedTextCard
+              text={aiApplyManager.processingResults.extracted_text}
+              textLength={aiApplyManager.processingResults.text_length}
+              filename={aiApplyManager.activeResume?.original_filename}
+            />
+            <SectionsCard
+              sections={[
+                { type: 'summary', present: true, completeness: 85 },
+                { type: 'experience', present: true, completeness: 90 },
+                { type: 'education', present: true, completeness: 80 },
+                { type: 'skills', present: true, completeness: 75 }
+              ]}
+            />
+          </div>
 
-          {/* AI Analysis Results */}
-          {aiApplyManager.processingResults ? (
+          {/* AI Analysis Section - Only show after processing is complete */}
+          {aiApplyManager.processingResults && (
             <div className="space-y-8">
-              {/* Aesthetic Score */}
-              {aiApplyManager.processingResults && (
+              {/* Analyze Button - Only show if analysis hasn't been completed for this resume */}
+              {!analysisCompleted && (
+                <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ready to Analyze Your Resume</h3>
+                  <p className="text-gray-600 mb-6">
+                    Get AI-powered insights about your resume's aesthetic appeal, skills, and receive personalized recommendations.
+                  </p>
+                  <button
+                    onClick={handleAnalyzeResume}
+                    disabled={isAnalyzing}
+                    className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Analyzing Resume...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Analyze Resume
+                      </>
+                    )}
+                  </button>
+                  {error && (
+                    <div className="mt-4 text-sm text-red-600">
+                      {error}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI Analysis Results - Only show after analysis is completed */}
+              {analysisCompleted && aiAnalysis && (
+                <>
+                {/* Aesthetic Score */}
+                {aiAnalysis?.aesthetic && (
                 <AestheticScoreCard
-                  score={75}
-                  strengths={[]}
-                  improvements={[]}
-                  assessment="AI-powered visual analysis of your resume design"
+                  score={aiAnalysis.aesthetic.score}
+                  strengths={aiAnalysis.aesthetic.strengths}
+                  improvements={aiAnalysis.aesthetic.improvements}
+                  assessment={aiAnalysis.aesthetic.assessment}
                 />
               )}
 
               {/* Skills */}
-              {aiApplyManager.processingResults && (
+              {aiAnalysis?.skills && (
                 <SkillsCard
-                  skills={{
-                    technical: [],
-                    soft: [],
-                    tools: []
-                  }}
-                />
-              )}
-
-              {/* Sections */}
-              {aiApplyManager.processingResults && (
-                <SectionsCard
-                  sections={[
-                    { type: 'summary', present: true, completeness: 85 },
-                    { type: 'experience', present: true, completeness: 90 },
-                    { type: 'education', present: true, completeness: 80 },
-                    { type: 'skills', present: true, completeness: 75 }
-                  ]}
+                  skills={aiAnalysis.skills}
                 />
               )}
 
               {/* Recommendations */}
-              {aiApplyManager.processingResults && (
-                <RecommendationsCard
-                  recommendations={[]}
-                  strengths={[]}
-                  improvements={[]}
-                />
+              {aiAnalysis?.recommendations && (
+                (aiAnalysis.recommendations.recommendations?.length > 0 || 
+                 aiAnalysis.recommendations.strengths?.length > 0 || 
+                 aiAnalysis.recommendations.improvements?.length > 0) && (
+                  <RecommendationsCard
+                    recommendations={aiAnalysis.recommendations.recommendations || []}
+                    strengths={aiAnalysis.recommendations.strengths || []}
+                    improvements={aiAnalysis.recommendations.improvements || []}
+                  />
+                )
+              )}
+                </>
               )}
             </div>
-          ) : (
-            <AnalysisSkeleton />
           )}
         </div>
       )}

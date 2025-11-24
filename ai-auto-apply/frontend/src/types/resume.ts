@@ -2,12 +2,15 @@ export interface ResumeDocument {
   id: string;
   user_id: string;
   original_filename: string;
-  uploaded_at: string;
+  upload_date: string; // Changed from uploaded_at to match API response
   is_active: boolean;
-  status?: "processed" | "pending" | "error" | "processing";
+  processing_status?: "completed" | "pending" | "error" | "processing";
   file_path?: string;
   file_size?: number;
   mime_type?: string;
+  filename?: string;
+  updated_at?: string;
+  processed_at?: string;
 }
 
 export interface PdfMetadata {

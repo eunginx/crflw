@@ -4,6 +4,7 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { pool } from '../db.js';
+import userResumeStateService from '../services/userResumeStateService.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -597,6 +598,18 @@ async function processDocument(req, res) {
       textLength: result.data.textLength,
       hasScreenshot: !!result.data.screenshotPath
     });
+
+    // Update persistent state for user if this is a resume
+    if (document.document_type === 'resume' && document.user_email) {
+      try {
+        console.log("🔄 [Process Document] Updating persistent resume state for user:", document.user_email);
+        await userResumeStateService.updateUserResumeState(document.user_email, documentId);
+        console.log("✅ [Process Document] Persistent state updated successfully");
+      } catch (stateError) {
+        console.error("❌ [Process Document] Error updating persistent state:", stateError);
+        // Don't fail the request, just log the error
+      }
+    }
 
     res.json({
       success: true,

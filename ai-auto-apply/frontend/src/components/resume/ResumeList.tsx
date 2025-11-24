@@ -20,6 +20,27 @@ const ResumeList: React.FC<ResumeListProps> = ({
   loading = false,
   processing = false
 }) => {
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'Unknown date';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error, 'Input:', dateString);
+      return 'Invalid Date';
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-center py-4">
@@ -46,7 +67,7 @@ const ResumeList: React.FC<ResumeListProps> = ({
             <div>
               <p className="font-medium text-gray-800">{resume.original_filename}</p>
               <p className="text-sm text-gray-600">
-                Uploaded: {resume.uploaded_at ? new Date(resume.uploaded_at).toLocaleDateString() : 'Unknown date'}
+                Uploaded: {formatDate(resume.upload_date)}
               </p>
               <div className="flex items-center space-x-2 mt-1">
                 {resume.is_active && (
@@ -54,17 +75,17 @@ const ResumeList: React.FC<ResumeListProps> = ({
                     Active
                   </span>
                 )}
-                {resume.status && (
+                {resume.processing_status && (
                   <span 
                     className={`px-2 py-1 text-xs rounded-full ${
-                      resume.status === 'processed' 
+                      resume.processing_status === 'completed' 
                         ? 'bg-blue-100 text-blue-800' 
-                        : resume.status === 'pending'
+                        : resume.processing_status === 'pending'
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {resume.status.charAt(0).toUpperCase() + resume.status.slice(1)}
+                    {resume.processing_status.charAt(0).toUpperCase() + resume.processing_status.slice(1)}
                   </span>
                 )}
               </div>

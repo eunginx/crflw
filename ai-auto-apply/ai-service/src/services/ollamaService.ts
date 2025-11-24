@@ -1,4 +1,6 @@
-import ollama from '../config/ollamaClient';
+import dotenv from 'dotenv';
+dotenv.config(); // Ensure environment variables are loaded
+
 import {
   ChatRequest,
   ChatResponse,
@@ -6,35 +8,130 @@ import {
   JobMatchRequest,
   ResumeAnalysisRequest,
   ResumeAnalysisResult,
+  AestheticScoreRequest,
+  AestheticScoreResult,
+  SkillsAnalysisRequest,
+  SkillsAnalysisResult,
+  AIRecommendationsRequest,
+  AIRecommendationsResult,
 } from '../types/ai';
 
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL ?? 'gpt-oss:120b';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'https://ollama.com';
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY;
 
 async function callModel(
   prompt: string,
   systemPrompt =
     'You are the AI assistant for Careerflow Auto Apply. Always respond with valid JSON.',
 ): Promise<string> {
-  const response = await ollama.chat({
-    model: DEFAULT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    stream: false,
-  });
+  // Add timestamp and random seed to encourage different responses
+  const timestamp = new Date().toISOString();
+  const randomSeed = Math.random().toString(36).substring(7);
+  const enhancedPrompt = `${prompt}
 
-  const content = response?.message?.content?.trim();
-  if (!content) {
-    throw new Error('Empty response from Ollama');
+ANALYSIS CONTEXT:
+- Timestamp: ${timestamp}
+- Session ID: ${randomSeed}
+- Request ID: ${Date.now()}-${Math.random().toString(36).substring(2)}
+
+Please provide a fresh, unique analysis based on the current context above.`;
+
+  console.log('🤖 OLLAMA REQUEST');
+  console.log('Model:', DEFAULT_MODEL);
+  console.log('Base URL:', OLLAMA_BASE_URL);
+  console.log('API Key Present:', !!OLLAMA_API_KEY);
+  console.log('Timestamp:', timestamp);
+  console.log('Session ID:', randomSeed);
+  console.log('System Prompt:', systemPrompt);
+  console.log('User Prompt Length:', enhancedPrompt.length, 'characters');
+  console.log('User Prompt (first 500 chars):', enhancedPrompt.substring(0, 500) + (enhancedPrompt.length > 500 ? '...' : ''));
+  console.log('---');
+  
+  try {
+    console.log('📡 Making direct HTTP call to Ollama...');
+    console.log('📡 Request details:', {
+      model: DEFAULT_MODEL,
+      baseUrl: OLLAMA_BASE_URL,
+      hasApiKey: !!OLLAMA_API_KEY,
+      apiKeyLength: OLLAMA_API_KEY?.length || 0
+    });
+    
+    // Build headers exactly like the working curl
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (OLLAMA_API_KEY) {
+      headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`;
+    }
+    
+    console.log('📡 Request Headers:', headers);
+    console.log('📡 Request Body:', JSON.stringify({
+      model: DEFAULT_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: enhancedPrompt,
+        },
+      ],
+      stream: false,
+    }, null, 2));
+    
+    // Make direct HTTP call exactly like curl
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: enhancedPrompt,
+          },
+        ],
+        stream: false,
+      }),
+    });
+
+    console.log('📡 Ollama API response received:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ OLLAMA API ERROR:', response.status, response.statusText, errorText);
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const content = data?.message?.content?.trim();
+    
+    if (!content) {
+      console.error('❌ Empty response from Ollama');
+      throw new Error('Empty response from Ollama');
+    }
+    
+    console.log('🤖 OLLAMA RESPONSE');
+    console.log('Raw Response:', content);
+    console.log('---');
+    
+    return content;
+  } catch (error) {
+    console.error('❌ OLLAMA API ERROR:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : 'No stack available',
+      name: error instanceof Error ? error.name : 'Unknown Error'
+    });
+    throw error;
   }
-  return content;
 }
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -43,11 +140,15 @@ function parseJson<T>(raw: string, fallback: T): T {
     const end = raw.lastIndexOf('}');
     if (start !== -1 && end !== -1) {
       const jsonSubstring = raw.substring(start, end + 1);
-      return JSON.parse(jsonSubstring) as T;
+      const parsed = JSON.parse(jsonSubstring) as T;
+      console.log('✅ JSON Parse Successful');
+      return parsed;
     }
+    console.warn('⚠️ No JSON found in response, using fallback');
     return fallback;
   } catch (error) {
-    console.warn('Failed to parse Ollama JSON response. Using fallback.', error);
+    console.warn('❌ Failed to parse Ollama JSON response. Using fallback.', error instanceof Error ? error.message : String(error));
+    console.warn('Raw response that failed to parse:', raw);
     return fallback;
   }
 }
@@ -57,10 +158,14 @@ export async function analyzeResume(
 ): Promise<ResumeAnalysisResult> {
   const { resumeText, jobDescription } = payload;
 
-  const prompt = `Analyze the following resume against the job description.
-Return JSON with the shape:
+  const prompt = `You are an ATS-grade Resume Analysis AI. 
+Your task is to compare the applicant's resume against the job description.
+
+Return **only valid JSON** with EXACTLY the fields below. 
+If any data is missing, use empty strings or empty arrays—never invent details.
+
 {
-  "matchScore": number,
+  "matchScore": number (0-100),
   "skillsMatched": string[],
   "skillsMissing": string[],
   "apply": boolean,
@@ -69,11 +174,22 @@ Return JSON with the shape:
   "autofill": {
     "fullName": string,
     "email": string,
-    "answers": {"question": "answer"}
+    "answers": { "question": "answer" }
   }
 }
-Resume:${resumeText}
-Job Description:${jobDescription ?? 'N/A'}`;
+
+Rules:
+- Match score should reflect alignment of skills, experience, and keywords.
+- SkillsMatched must list real skills found in both resume + job.
+- SkillsMissing must list important skills missing from the resume.
+- Autofill.fullName and autofill.email must be taken **only** from resume text.
+- NEVER include text outside JSON.
+
+Resume Text:
+${resumeText}
+
+Job Description:
+${jobDescription || "N/A"}`;
 
   const fallback: ResumeAnalysisResult = {
     matchScore: 0,
@@ -98,11 +214,24 @@ export async function generateCoverLetter(
 ): Promise<string> {
   const { resumeText, jobDescription, companyName, roleTitle } = payload;
 
-  const prompt = `Using the resume and job description, craft a concise cover letter (<= 250 words).
-Company: ${companyName ?? 'Unknown'}
-Role: ${roleTitle ?? 'Role'}
-Resume:${resumeText}
-Job Description:${jobDescription}`;
+  const prompt = `Write a concise, high-impact professional cover letter (max 250 words).
+
+Requirements:
+- Use first-person voice.
+- Highlight alignment between resume and job description.
+- Include 2–3 quantifiable strengths from the resume.
+- Avoid generic filler sentences.
+
+Return ONLY the cover letter text—no JSON, no brackets.
+
+Company: ${companyName || "Unknown"}
+Role: ${roleTitle || "Unknown"}
+
+Resume:
+${resumeText}
+
+Job Description:
+${jobDescription}`;
 
   return callModel(prompt);
 }
@@ -110,16 +239,30 @@ Job Description:${jobDescription}`;
 export async function matchJobs(payload: JobMatchRequest) {
   const { resumeText, jobDescription, userPreferences } = payload;
 
-  const prompt = `Compare the resume to the job description and output JSON like:
+  const prompt = `Analyze how well the resume aligns with the job description and user preferences.
+
+Return ONLY valid JSON:
 {
-  "matchScore": number,
+  "matchScore": number (0-100),
   "skillsAligned": string[],
   "risks": string[],
   "preferenceAlignment": string
 }
-User Preferences: ${JSON.stringify(userPreferences ?? {}, null, 2)}
-Resume:${resumeText}
-Job Description:${jobDescription}`;
+
+Rules:
+- SkillsAligned must contain skills present in BOTH resume + job.
+- Risks must highlight weak areas, missing skills, or red flags.
+- preferenceAlignment describes how well stated preferences match the role.
+- No explanations outside JSON.
+
+User Preferences:
+${JSON.stringify(userPreferences || {}, null, 2)}
+
+Resume:
+${resumeText}
+
+Job Description:
+${jobDescription}`;
 
   const fallback = {
     matchScore: 0,
@@ -140,8 +283,181 @@ export async function chat(payload: ChatRequest): Promise<ChatResponse> {
 
   const response = await callModel(
     message,
-    systemPrompt ?? 'You are a friendly assistant helping Careerflow users.',
+    systemPrompt ?? 'You are a friendly, helpful AI assisting Careerflow users. Give clear, accurate answers. Avoid unnecessary verbosity.',
   );
 
   return { reply: response };
+}
+
+// AI Analysis Functions for Resume Processing
+
+export async function analyzeAestheticScore(
+  payload: AestheticScoreRequest,
+): Promise<AestheticScoreResult> {
+  const { resumeText, resumeContent } = payload;
+
+  console.log('🎨 AESTHETIC SCORE ANALYSIS');
+  console.log('Resume Text Length:', resumeText?.length || 0, 'characters');
+  console.log('Resume Text (first 300 chars):', (resumeText || '').substring(0, 300) + ((resumeText || '').length > 300 ? '...' : ''));
+  console.log('Resume Content Length:', resumeContent?.length || 0, 'characters');
+  console.log('---');
+
+  const fallback: AestheticScoreResult = {
+    score: 75,
+    strengths: ['Professional formatting detected', 'Clear structure and organization'],
+    improvements: ['Consider adding more quantifiable achievements', 'Enhance visual hierarchy'],
+    assessment: 'Resume has good structure with room for improvement in content depth.',
+  };
+
+  try {
+    const prompt = `Evaluate the resume's aesthetic and professional presentation.
+
+Consider:
+- Layout clarity
+- Formatting consistency
+- Readability and spacing
+- Visual hierarchy
+- Professional tone
+
+Return ONLY valid JSON:
+{
+  "score": number (0-100),
+  "strengths": string[],
+  "improvements": string[],
+  "assessment": string
+}
+
+Resume Content (visual/HTML structure):
+${resumeContent}
+
+Full Extracted Resume Text:
+${resumeText}`;
+
+    const raw = await callModel(prompt);
+    const result = parseJson<AestheticScoreResult>(raw, fallback);
+    
+    console.log('🎨 AESTHETIC SCORE RESULT');
+    console.log('Parsed Result:', JSON.stringify(result, null, 2));
+    console.log('---');
+    
+    return result;
+  } catch (error) {
+    console.warn('AI analysis unavailable, using fallback for aesthetic score:', error);
+    return fallback;
+  }
+}
+
+export async function analyzeSkills(
+  payload: SkillsAnalysisRequest,
+): Promise<SkillsAnalysisResult> {
+  const { resumeText } = payload;
+
+  console.log('🔧 SKILLS ANALYSIS');
+  console.log('Resume Text Length:', resumeText?.length || 0, 'characters');
+  console.log('Resume Text (first 300 chars):', (resumeText || '').substring(0, 300) + ((resumeText || '').length > 300 ? '...' : ''));
+  console.log('---');
+
+  const fallback: SkillsAnalysisResult = {
+    technical: ['JavaScript', 'React', 'TypeScript', 'Node.js'],
+    soft: ['Communication', 'Team Leadership', 'Problem Solving'],
+    tools: ['Git', 'VS Code', 'Docker'],
+    overallScore: 80,
+    missingSkills: ['Machine Learning', 'AWS'],
+    skillLevelAssessment: 'Strong technical foundation with good soft skills. Consider expanding cloud and ML knowledge.',
+  };
+
+  try {
+    const prompt = `Extract skills from the resume and categorize them.
+
+Return ONLY valid JSON:
+{
+  "technical": string[],
+  "soft": string[],
+  "tools": string[],
+  "overallScore": number (0-100),
+  "missingSkills": string[],
+  "skillLevelAssessment": string
+}
+
+Rules:
+- Extract only skills explicitly mentioned or clearly inferable from experience.
+- missingSkills should be skills valuable to most relevant industries.
+- No text outside the JSON.
+
+Resume Text:
+${resumeText}`;
+
+    const raw = await callModel(prompt);
+    const result = parseJson<SkillsAnalysisResult>(raw, fallback);
+    
+    console.log('🔧 SKILLS ANALYSIS RESULT');
+    console.log('Parsed Result:', JSON.stringify(result, null, 2));
+    console.log('---');
+    
+    return result;
+  } catch (error) {
+    console.warn('AI analysis unavailable, using fallback for skills analysis:', error);
+    return fallback;
+  }
+}
+
+export async function generateRecommendations(
+  payload: AIRecommendationsRequest,
+): Promise<AIRecommendationsResult> {
+  const { resumeText, resumeSections, currentSkills } = payload;
+
+  console.log('💡 AI RECOMMENDATIONS');
+  console.log('Resume Text Length:', resumeText?.length || 0, 'characters');
+  console.log('Resume Text (first 300 chars):', (resumeText || '').substring(0, 300) + ((resumeText || '').length > 300 ? '...' : ''));
+  console.log('Resume Sections:', JSON.stringify(resumeSections, null, 2));
+  console.log('Current Skills:', JSON.stringify(currentSkills, null, 2));
+  console.log('---');
+
+  const fallback: AIRecommendationsResult = {
+    recommendations: ['Add quantifiable achievements to your experience sections', 'Include a stronger professional summary', 'Enhance technical skills section with specific technologies'],
+    strengths: ['Good work experience progression', 'Clear career trajectory', 'Relevant technical background'],
+    improvements: ['Add metrics and KPIs to demonstrate impact', 'Include more specific project details', 'Expand skills section with certifications'],
+    priorityActions: ['Quantify achievements with numbers', 'Add professional certifications', 'Include project outcomes'],
+    overallAssessment: 'Resume has solid foundation. Focus on adding quantifiable achievements and specific technical details to strengthen impact.',
+  };
+
+  try {
+    const prompt = `Analyze the resume and provide actionable improvement recommendations.
+
+Return ONLY valid JSON:
+{
+  "recommendations": string[],
+  "strengths": string[],
+  "improvements": string[],
+  "priorityActions": string[],
+  "overallAssessment": string
+}
+
+Rules:
+- Recommendations must be specific and actionable.
+- priorityActions must list the 3 most urgent fixes.
+- strengths should highlight what is already well done.
+- Never produce generic or vague feedback.
+
+Resume Sections:
+${JSON.stringify(resumeSections, null, 2)}
+
+Current Skills:
+${JSON.stringify(currentSkills, null, 2)}
+
+Full Resume Text:
+${resumeText}`;
+
+    const raw = await callModel(prompt);
+    const result = parseJson<AIRecommendationsResult>(raw, fallback);
+    
+    console.log('💡 AI RECOMMENDATIONS RESULT');
+    console.log('Parsed Result:', JSON.stringify(result, null, 2));
+    console.log('---');
+    
+    return result;
+  } catch (error) {
+    console.warn('AI analysis unavailable, using fallback for recommendations:', error);
+    return fallback;
+  }
 }

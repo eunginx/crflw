@@ -30,7 +30,7 @@ const ActiveResumeCard: React.FC<ActiveResumeCardProps> = ({
         <div>
           <p className="font-medium text-green-800">{activeResume.original_filename}</p>
           <p className="text-sm text-green-600">
-            Uploaded: {activeResume.uploaded_at ? new Date(activeResume.uploaded_at).toLocaleDateString() : 'Unknown date'}
+            Uploaded: {activeResume.upload_date ? new Date(activeResume.upload_date).toLocaleDateString() : 'Unknown date'}
           </p>
           {activeResume.file_size && (
             <p className="text-sm text-green-600">
