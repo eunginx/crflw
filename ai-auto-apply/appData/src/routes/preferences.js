@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const UserPreferences = require('../models/UserPreferences');
+import express from 'express';
+import User from '../models/User.js';
+import UserPreferences from '../models/UserPreferences.js';
 const router = express.Router();
 
 // Get user preferences
@@ -42,4 +42,4 @@ router.put('/preferences/:firebaseUid', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

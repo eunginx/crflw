@@ -1,7 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const fs = require('fs').promises;
-const {
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { pool } from '../db.js';
+
+// Fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+import {
   uploadDocument,
   getUserDocuments,
   getActiveDocument,
@@ -15,7 +22,9 @@ const {
   getDocumentStatistics,
   getDocumentSummary,
   upload
-} = require('./documentManagement');
+} from './documentManagement.js';
+
+const router = express.Router();
 
 // Upload document (with file)
 router.post('/upload', upload.single('file'), async (req, res) => {
@@ -313,4 +322,40 @@ router.post('/cli/tables', async (req, res) => {
   }
 });
 
-module.exports = router;
+// Serve screenshot files
+router.get('/screenshots/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    console.log('🖼️ Screenshot request for filename:', filename);
+    
+    const screenshotsDir = path.join(__dirname, '../../uploads/screenshots');
+    const filePath = path.join(screenshotsDir, filename);
+    
+    console.log('🖼️ Screenshots directory:', screenshotsDir);
+    console.log('🖼️ Full file path:', filePath);
+
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+      console.log('✅ Screenshot file found');
+    } catch (accessError) {
+      console.error('❌ Screenshot file not found:', accessError);
+      return res.status(404).json({
+        error: 'Screenshot not found',
+        filename,
+        searchedPath: filePath
+      });
+    }
+
+    // Send the file
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error serving screenshot:', error);
+    res.status(500).json({
+      error: 'Failed to serve screenshot',
+      details: error.message
+    });
+  }
+});
+
+export default router;

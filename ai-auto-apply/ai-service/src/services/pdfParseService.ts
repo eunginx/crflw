@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import pdfParse from "pdf-parse";
+const pdfParse = require("pdf-parse");
 
 export interface PdfParseResult {
   text: string;

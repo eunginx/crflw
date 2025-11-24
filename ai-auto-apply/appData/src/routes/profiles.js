@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const UserProfile = require('../models/UserProfile');
+import express from 'express';
+import User from '../models/User.js';
+import UserProfile from '../models/UserProfile.js';
 const router = express.Router();
 
 // Get user profile
@@ -65,4 +65,4 @@ router.put('/:firebaseUid/resume', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

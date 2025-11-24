@@ -11,11 +11,83 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
-console.log("[API] Environment:", process.env.REACT_APP_ENV);
-console.log("[API] Using base URL:", API_BASE_URL);
+
+// Development logging helper
+const devLog = (message: string, data?: any) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[API] ${message}`, data);
+  }
+};
+
+// Global error handler
+const handleApiError = (error: any, context?: string) => {
+  // Only log in development
+  if (process.env.NODE_ENV === 'development') {
+    console.error(`[API] Error${context ? ` in ${context}` : ''}:`, error);
+  }
+  
+  // Attach error to window for debugging (dev only)
+  if (process.env.NODE_ENV === 'development') {
+    (window as any).__LAST_API_ERROR__ = error;
+  }
+  
+  // Return enhanced error without stack trace for production
+  const enhancedError = new Error(error.message || 'API request failed');
+  Object.assign(enhancedError, {
+    status: error.status,
+    statusText: error.statusText,
+    context
+  });
+  
+  return enhancedError;
+};
+
+// Backend status tracking
+let backendStatus: 'online' | 'offline' | 'checking' = 'checking';
+let backendStatusCheckPromise: Promise<boolean> | null = null;
+
+// Check backend status with debouncing
+const checkBackendStatus = async (forceCheck = false): Promise<boolean> => {
+  if (backendStatus === 'online' && !forceCheck) {
+    return true;
+  }
+  
+  if (backendStatusCheckPromise && !forceCheck) {
+    return backendStatusCheckPromise;
+  }
+  
+  backendStatusCheckPromise = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      
+      backendStatus = response.ok ? 'online' : 'offline';
+      return backendStatus === 'online';
+    } catch (error) {
+      backendStatus = 'offline';
+      return false;
+    } finally {
+      backendStatusCheckPromise = null;
+    }
+  })();
+  
+  return backendStatusCheckPromise;
+};
 
 // Base API call function with improved error handling
 const apiCall = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
+  // Check backend status first
+  const isBackendOnline = await checkBackendStatus();
+  if (!isBackendOnline) {
+    throw handleApiError(
+      new Error('Backend is currently offline'),
+      `apiCall(${endpoint})`
+    );
+  }
+  
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   
   try {
@@ -37,15 +109,7 @@ const apiCall = async (endpoint: string, options: RequestInit = {}): Promise<any
 
     return await response.json();
   } catch (error: any) {
-    console.error('[API] Error:', error);
-    
-    // Attach error to window for debugging
-    (window as any).__LAST_API_ERROR__ = error;
-    
-    // Rethrow with more context
-    const enhancedError = new Error(error.message || 'API request failed');
-    Object.assign(enhancedError, error);
-    throw enhancedError;
+    throw handleApiError(error, `apiCall(${endpoint})`);
   }
 };
 
@@ -96,35 +160,26 @@ export const profileAPI = {
 export const settingsAPI = {
   // Get user settings
   async getSettings(firebaseUid: string) {
-    console.log('[API][SETTINGS] Getting settings for Firebase UID:', firebaseUid);
+    devLog('Getting settings for Firebase UID', firebaseUid);
     try {
       const endpoint = `/settings/${firebaseUid}`;
-      console.log('[API][SETTINGS] Making API call to:', endpoint);
+      devLog('Making API call to', endpoint);
       
       const result = await apiCall(endpoint);
-      console.log('[API][SETTINGS] Settings retrieved successfully:', result);
+      devLog('Settings retrieved successfully', result);
       return result;
     } catch (error: any) {
-      console.error('[API][SETTINGS] Error getting settings:', error);
-      console.error('[API][SETTINGS] Error details:', {
-        message: error.message,
-        status: error.status,
-        statusText: error.statusText,
-        stack: error.stack
-      });
+      const enhancedError = handleApiError(error, 'getSettings');
       
       // Handle different error types
       if (error.status === 404) {
-        console.log('[API][SETTINGS] User not found (404), this is normal for new users');
+        devLog('User not found (404), this is normal for new users');
         return null; // Return null for new users
       } else if (error.status === 500) {
-        console.error('[API][SETTINGS] Server error (500)');
         throw new Error('Server error when loading settings');
       } else if (error.status === 0) {
-        console.error('[API][SETTINGS] Network error or API unavailable');
         throw new Error('Network error - unable to connect to server');
       } else {
-        console.error('[API][SETTINGS] Unknown error:', error);
         throw new Error(`Failed to load settings from database: ${error.message || 'Unknown error'}`);
       }
     }
@@ -150,10 +205,10 @@ export const healthAPI = {
 export const testConnection = async () => {
   try {
     const data = await healthAPI.check();
-    console.log('[API] Connection test successful:', data);
+    devLog('Connection test successful', data);
     return true;
   } catch (error) {
-    console.error('[API] Connection test failed:', error);
+    devLog('Connection test failed', error);
     return false;
   }
 };
@@ -162,14 +217,13 @@ export const testConnection = async () => {
 export const applicationsAPI = {
   // Get all applications for a user
   async getApplications(email: string): Promise<any[]> {
-    console.log('[API][APPLICATIONS] Getting applications for email:', email);
+    devLog('Getting applications for email', email);
     try {
       const result = await apiCall(`/email/applications/${email}`);
-      console.log('[API][APPLICATIONS] Applications retrieved:', result);
+      devLog('Applications retrieved', result);
       return result || [];
     } catch (error) {
-      console.error('[API][APPLICATIONS] Error getting applications:', error);
-      throw error;
+      throw handleApiError(error, 'getApplications');
     }
   },
 
@@ -232,37 +286,35 @@ export const preferencesAPI = {
 export const resumesEmailAPI = {
   // Get all resume files for a user by email
   async getResumes(email: string) {
-    console.log('[API][RESUMES-EMAIL] Getting resumes for email:', email);
+    devLog('Getting resumes for email', email);
     try {
       const result = await apiCall(`/email/resumes/${encodeURIComponent(email)}`);
-      console.log('[API][RESUMES-EMAIL] Resumes retrieved:', result);
+      devLog('Resumes retrieved', result);
       return result || [];
     } catch (error) {
-      console.error('[API][RESUMES-EMAIL] Error getting resumes:', error);
-      throw error;
+      throw handleApiError(error, 'getResumes');
     }
   },
 
   // Get active resume for a user by email
   async getActiveResume(email: string) {
-    console.log('[API][RESUMES-EMAIL] Getting active resume for email:', email);
+    devLog('Getting active resume for email', email);
     try {
       const result = await apiCall(`/email/resumes/${encodeURIComponent(email)}/active`);
-      console.log('[API][RESUMES-EMAIL] Active resume retrieved:', result);
+      devLog('Active resume retrieved', result);
       return result;
     } catch (error: any) {
       if (error.status === 404) {
-        console.log('[API][RESUMES-EMAIL] No active resume found');
+        devLog('No active resume found');
         return null;
       }
-      console.error('[API][RESUMES-EMAIL] Error getting active resume:', error);
-      throw error;
+      throw handleApiError(error, 'getActiveResume');
     }
   },
 
   // Upload new resume file (supports FormData)
   async uploadResume(email: string, file: File) {
-    console.log('[API][RESUMES-EMAIL] Uploading resume for email:', email, 'file:', file.name);
+    devLog('Uploading resume', { email, fileName: file.name });
     
     const formData = new FormData();
     formData.append('file', file);
@@ -284,24 +336,16 @@ export const resumesEmailAPI = {
       }
 
       const result = await response.json();
-      console.log('[API][RESUMES-EMAIL] Resume uploaded successfully:', result);
+      devLog('Resume uploaded successfully', result);
       return result;
     } catch (error: any) {
-      console.error('[API][RESUMES-EMAIL] Error uploading resume:', error);
-      
-      // Attach error to window for debugging
-      (window as any).__LAST_API_ERROR__ = error;
-      
-      // Rethrow with more context
-      const enhancedError = new Error(error.message || 'Resume upload failed');
-      Object.assign(enhancedError, error);
-      throw enhancedError;
+      throw handleApiError(error, 'uploadResume');
     }
   },
 
   // Set active resume
   async setActiveResume(email: string, resumeId: string) {
-    console.log('[API][RESUMES-EMAIL] Setting active resume:', resumeId, 'for email:', email);
+    devLog('Setting active resume', { email, resumeId });
     return apiCall(`/email/resumes/${encodeURIComponent(email)}/${resumeId}/active`, {
       method: 'PUT',
     });
@@ -309,7 +353,7 @@ export const resumesEmailAPI = {
 
   // Delete resume file
   async deleteResume(email: string, resumeId: string) {
-    console.log('[API][RESUMES-EMAIL] Deleting resume:', resumeId, 'for email:', email);
+    devLog('Deleting resume', { email, resumeId });
     return apiCall(`/email/resumes/${encodeURIComponent(email)}/${resumeId}`, {
       method: 'DELETE',
     });
@@ -317,7 +361,7 @@ export const resumesEmailAPI = {
 
   // Download resume file
   async downloadResume(resumeId: string): Promise<Blob> {
-    console.log('[API][RESUMES-EMAIL] Downloading resume:', resumeId);
+    devLog('Downloading resume', resumeId);
     
     const url = `${API_BASE_URL}/email/resumes/file/${resumeId}`;
     
@@ -336,8 +380,7 @@ export const resumesEmailAPI = {
 
       return await response.blob();
     } catch (error: any) {
-      console.error('[API][RESUMES-EMAIL] Error downloading resume:', error);
-      throw error;
+      throw handleApiError(error, 'downloadResume');
     }
   },
 };
@@ -355,7 +398,7 @@ export const emailUserDataAPI = {
       throw error;
     }
     
-    console.log('[API][EMAIL-USER-DATA] Getting user data for email:', email);
+    devLog('Getting user data for email', email);
     return apiCall(`/email/user-data/${encodeURIComponent(email)}`);
   },
 
@@ -371,7 +414,7 @@ export const emailUserDataAPI = {
       throw error;
     }
     
-    console.log('[API][EMAIL-USER-DATA] Updating user data for email:', email);
+    devLog('Updating user data for email', email);
     return apiCall(`/email/user-data/${encodeURIComponent(email)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -386,7 +429,7 @@ export const emailUserDataAPI = {
 export const emailUserAPI = {
   // Create or get user by email
   async getOrCreateUser(email: string, userData: any = {}) {
-    console.log('[API][EMAIL-USER] Creating/updating user for email:', email);
+    devLog('Creating/updating user for email', email);
     return apiCall('/email/user', {
       method: 'POST',
       body: JSON.stringify({ email, ...userData }),
@@ -395,13 +438,13 @@ export const emailUserAPI = {
 
   // Find user by email
   async findByEmail(email: string) {
-    console.log('[API][EMAIL-USER] Finding user by email:', email);
+    devLog('Finding user by email', email);
     return apiCall(`/email/user/${email}`);
   },
 
   // Find user by Firebase UID (for compatibility)
   async findByFirebaseUid(firebaseUid: string) {
-    console.log('[API][EMAIL-USER] Finding user by Firebase UID:', firebaseUid);
+    devLog('Finding user by Firebase UID', firebaseUid);
     return apiCall(`/email/user/firebase/${firebaseUid}`);
   },
 };
@@ -410,17 +453,17 @@ export const emailUserAPI = {
 export const emailSettingsAPI = {
   // Get user settings by email
   async getSettings(email: string) {
-    console.log('[API][EMAIL-SETTINGS] Getting settings for email:', email);
+    devLog('Getting settings for email', email);
     try {
       const result = await apiCall(`/email/settings/${email}`);
-      console.log('[API][EMAIL-SETTINGS] Settings retrieved:', result);
+      devLog('Settings retrieved', result);
       return result;
     } catch (error: any) {
-      console.error('[API][EMAIL-SETTINGS] Error getting settings:', error);
+      const enhancedError = handleApiError(error, 'emailSettings.getSettings');
       
       // Handle different error types
       if (error.status === 404) {
-        console.log('[API][EMAIL-SETTINGS] User not found (404), this is normal for new users');
+        devLog('User not found (404), this is normal for new users');
         return null; // Return null for new users
       } else if (error.status === 500) {
         throw new Error('Server error when loading settings');
@@ -432,7 +475,7 @@ export const emailSettingsAPI = {
 
   // Update user settings by email
   async updateSettings(email: string, settingsData: any) {
-    console.log('[API][EMAIL-SETTINGS] Updating settings for email:', email);
+    devLog('Updating settings for email', email);
     return apiCall(`/email/settings/${email}`, {
       method: 'PUT',
       body: JSON.stringify(settingsData),
@@ -441,7 +484,7 @@ export const emailSettingsAPI = {
 
   // Update specific settings fields
   async patchSettings(email: string, fields: any) {
-    console.log('[API][EMAIL-SETTINGS] Patching settings for email:', email);
+    devLog('Patching settings for email', email);
     return apiCall(`/email/settings/${email}`, {
       method: 'PATCH',
       body: JSON.stringify(fields),
@@ -450,7 +493,7 @@ export const emailSettingsAPI = {
 
   // Delete settings by email
   async deleteSettings(email: string) {
-    console.log('[API][EMAIL-SETTINGS] Deleting settings for email:', email);
+    devLog('Deleting settings for email', email);
     return apiCall(`/email/settings/${email}`, {
       method: 'DELETE',
     });
@@ -461,32 +504,31 @@ export const emailSettingsAPI = {
 export const emailApplicationsAPI = {
   // Get all applications for a user by email
   async getApplications(email: string): Promise<any[]> {
-    console.log('[API][EMAIL-APPLICATIONS] Getting applications for email:', email);
+    devLog('Getting applications for email', email);
     try {
       const result = await apiCall(`/email/applications/${email}`);
-      console.log('[API][EMAIL-APPLICATIONS] Applications retrieved:', result);
+      devLog('Applications retrieved', result);
       return result || [];
     } catch (error) {
-      console.error('[API][EMAIL-APPLICATIONS] Error getting applications:', error);
-      throw error;
+      throw handleApiError(error, 'emailApplications.getApplications');
     }
   },
 
   // Get applications by status for a user by email
   async getApplicationsByStatus(email: string, status: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Getting applications for email:', email, 'status:', status);
+    devLog('Getting applications for email', { email, status });
     return apiCall(`/email/applications/${email}/status/${status}`);
   },
 
   // Get specific application by ID and email
   async getApplication(email: string, applicationId: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Getting application:', applicationId, 'for email:', email);
+    devLog('Getting application', { email, applicationId });
     return apiCall(`/email/applications/${email}/${applicationId}`);
   },
 
   // Create new application by email
   async createApplication(email: string, applicationData: any) {
-    console.log('[API][EMAIL-APPLICATIONS] Creating application for email:', email);
+    devLog('Creating application for email', email);
     return apiCall(`/email/applications/${email}`, {
       method: 'POST',
       body: JSON.stringify(applicationData),
@@ -495,7 +537,7 @@ export const emailApplicationsAPI = {
 
   // Update application by ID and email
   async updateApplication(email: string, applicationId: string, updates: any) {
-    console.log('[API][EMAIL-APPLICATIONS] Updating application:', applicationId, 'for email:', email);
+    devLog('Updating application', { email, applicationId });
     return apiCall(`/email/applications/${email}/${applicationId}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
@@ -504,7 +546,7 @@ export const emailApplicationsAPI = {
 
   // Update application status by ID and email
   async updateApplicationStatus(email: string, applicationId: string, status: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Updating status:', status, 'for application:', applicationId);
+    devLog('Updating application status', { applicationId, status });
     return apiCall(`/email/applications/${email}/${applicationId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
@@ -513,7 +555,7 @@ export const emailApplicationsAPI = {
 
   // Delete application by ID and email
   async deleteApplication(email: string, applicationId: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Deleting application:', applicationId, 'for email:', email);
+    devLog('Deleting application', { email, applicationId });
     return apiCall(`/email/applications/${email}/${applicationId}`, {
       method: 'DELETE',
     });
@@ -521,25 +563,25 @@ export const emailApplicationsAPI = {
 
   // Get application statistics for a user by email
   async getStats(email: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Getting stats for email:', email);
+    devLog('Getting stats for email', email);
     return apiCall(`/email/applications/${email}/stats`);
   },
 
   // Search applications for a user by email
   async searchApplications(email: string, searchTerm: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Searching applications for email:', email, 'term:', searchTerm);
+    devLog('Searching applications', { email, searchTerm });
     return apiCall(`/email/applications/${email}/search?q=${encodeURIComponent(searchTerm)}`);
   },
 
   // Get recent applications for a user by email
   async getRecentApplications(email: string, limit: number = 10) {
-    console.log('[API][EMAIL-APPLICATIONS] Getting recent applications for email:', email);
+    devLog('Getting recent applications', { email, limit });
     return apiCall(`/email/applications/${email}/recent?limit=${limit}`);
   },
 
   // Get applications by company for a user by email
   async getApplicationsByCompany(email: string, company: string) {
-    console.log('[API][EMAIL-APPLICATIONS] Getting applications for email:', email, 'company:', company);
+    devLog('Getting applications by company', { email, company });
     return apiCall(`/email/applications/${email}/company/${encodeURIComponent(company)}`);
   },
 };
@@ -548,25 +590,25 @@ export const emailApplicationsAPI = {
 export const emailAnalyticsAPI = {
   // Get salary statistics
   async getSalaryStats() {
-    console.log('[API][EMAIL-ANALYTICS] Getting salary statistics');
+    devLog('Getting salary statistics');
     return apiCall('/email/settings/analytics/salary');
   },
 
   // Get popular locations
   async getPopularLocations(limit: number = 10) {
-    console.log('[API][EMAIL-ANALYTICS] Getting popular locations, limit:', limit);
+    devLog('Getting popular locations', { limit });
     return apiCall(`/email/settings/analytics/locations?limit=${limit}`);
   },
 
   // Get popular keywords
   async getPopularKeywords(limit: number = 20) {
-    console.log('[API][EMAIL-ANALYTICS] Getting popular keywords, limit:', limit);
+    devLog('Getting popular keywords', { limit });
     return apiCall(`/email/settings/analytics/keywords?limit=${limit}`);
   },
 
   // Get users by specific setting
   async getUsersBySetting(settingName: string, settingValue: any) {
-    console.log('[API][EMAIL-ANALYTICS] Getting users by setting:', settingName, 'value:', settingValue);
+    devLog('Getting users by setting', { settingName, settingValue });
     return apiCall(`/email/settings/analytics/users/${settingName}/${settingValue}`);
   },
 };
@@ -575,7 +617,7 @@ export const emailAnalyticsAPI = {
 export const jobStatusesAPI = {
   // Get all job statuses
   async getStatuses(options?: { includeHidden?: boolean; category?: string; groupLabel?: string }) {
-    console.log('[API][JOB-STATUSES] Getting job statuses with options:', options);
+    devLog('Getting job statuses with options', options);
     const params = new URLSearchParams();
     if (options?.includeHidden) params.append('includeHidden', 'true');
     if (options?.category) params.append('category', options.category);
@@ -587,7 +629,7 @@ export const jobStatusesAPI = {
 
   // Get enhanced statuses with computed fields
   async getEnhancedStatuses(options?: { includeHidden?: boolean }) {
-    console.log('[API][JOB-STATUSES] Getting enhanced job statuses');
+    devLog('Getting enhanced job statuses');
     const params = new URLSearchParams();
     if (options?.includeHidden) params.append('includeHidden', 'true');
     
@@ -597,25 +639,25 @@ export const jobStatusesAPI = {
 
   // Get statuses grouped by category
   async getStatusGroups() {
-    console.log('[API][JOB-STATUSES] Getting job status groups');
+    devLog('Getting job status groups');
     return apiCall('/job-statuses/groups');
   },
 
   // Get analytics data
   async getAnalyticsData() {
-    console.log('[API][JOB-STATUSES] Getting analytics data');
+    devLog('Getting analytics data');
     return apiCall('/job-statuses/analytics');
   },
 
   // Get specific status by key
   async getStatus(key: string) {
-    console.log('[API][JOB-STATUSES] Getting status:', key);
+    devLog('Getting status', key);
     return apiCall(`/job-statuses/${key}`);
   },
 
   // Create new status (admin only)
   async createStatus(statusData: any) {
-    console.log('[API][JOB-STATUSES] Creating new status');
+    devLog('Creating new status');
     return apiCall('/job-statuses', {
       method: 'POST',
       body: JSON.stringify(statusData),
@@ -624,7 +666,7 @@ export const jobStatusesAPI = {
 
   // Update status (admin only)
   async updateStatus(id: string, updates: any) {
-    console.log('[API][JOB-STATUSES] Updating status:', id);
+    devLog('Updating status', id);
     return apiCall(`/job-statuses/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
@@ -633,7 +675,7 @@ export const jobStatusesAPI = {
 
   // Delete status (admin only)
   async deleteStatus(id: string) {
-    console.log('[API][JOB-STATUSES] Deleting status:', id);
+    devLog('Deleting status', id);
     return apiCall(`/job-statuses/${id}`, {
       method: 'DELETE',
     });

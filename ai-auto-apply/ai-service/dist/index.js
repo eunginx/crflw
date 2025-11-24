@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
+const pdfRoutes_1 = __importDefault(require("./routes/pdfRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT ?? 4001);
@@ -47,6 +48,7 @@ app.get('/health', (_req, res) => {
     });
 });
 app.use('/api/ai', aiRoutes_1.default);
+app.use('/api/pdf', pdfRoutes_1.default);
 app.use((err, _req, res, _next) => {
     console.error('💥 [EXTREME][ERROR]', {
         message: err.message,
@@ -73,5 +75,9 @@ app.listen(PORT, () => {
         ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'https://ollama.com',
         ollamaModel: process.env.OLLAMA_MODEL ?? 'gpt-oss:120b',
         ollamaApiKey: maskedApiKey,
+        services: {
+            ai: '/api/ai',
+            pdf: '/api/pdf'
+        }
     });
 });

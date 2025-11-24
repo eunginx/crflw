@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const UserSettings = require('../models/UserSettings');
+import express from 'express';
+import User from '../models/User.js';
+import UserSettings from '../models/UserSettings.js';
 const router = express.Router();
 
 // Get user settings
@@ -48,4 +48,4 @@ router.use('*', (req, res, next) => {
   next();
 });
 
-module.exports = router;
+export default router;

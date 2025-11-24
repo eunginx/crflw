@@ -1,6 +1,6 @@
-const express = require('express');
-const multer = require('multer');
-const { UserEmail } = require('../models/UserEmail');
+import express from 'express';
+import multer from 'multer';
+import UserEmail from '../models/UserEmail.js';
 const router = express.Router();
 
 // Configure multer for file upload (in memory storage for database storage)
@@ -257,4 +257,4 @@ router.use((error, req, res, next) => {
   next(error);
 });
 
-module.exports = router;
+export default router;

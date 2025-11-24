@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { applicationsAPI, emailApplicationsAPI } from '../services/apiService';
 
@@ -46,21 +46,32 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { currentUser } = useAuth();
+  
+  // Prevent duplicate initialization
+  const hasLoadedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const loadJobs = useCallback(async () => {
-    if (!currentUser?.email) {
-      setJobs([]);
-      setLoading(false);
+    if (!currentUser?.email || hasLoadedRef.current) {
+      if (!currentUser?.email) {
+        setJobs([]);
+        setLoading(false);
+      }
       return;
     }
-
+    
+    hasLoadedRef.current = true;
     setLoading(true);
     setError(null);
     
     try {
-      console.log('[JOBS][LOAD] Loading jobs from PostgreSQL...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][LOAD] Loading jobs from PostgreSQL...');
+      }
       const applications = await emailApplicationsAPI.getApplications(currentUser.email);
-      console.log('[JOBS][LOAD] Applications loaded:', applications);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][LOAD] Applications loaded:', applications);
+      }
       
       const jobsData = (applications || []).map((app: JobApplicationData) => ({
         id: app.id,
@@ -76,24 +87,43 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: app.notes,
       }));
       
-      setJobs(jobsData);
+      if (mountedRef.current) {
+        setJobs(jobsData);
+      }
     } catch (err) {
-      console.error('[JOBS][ERROR] Failed to load jobs:', err);
-      setError('Failed to load job applications');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[JOBS][ERROR] Failed to load jobs:', err);
+      }
+      if (mountedRef.current) {
+        setError('Failed to load job applications');
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [currentUser]);
 
   useEffect(() => {
-    loadJobs();
+    if (mountedRef.current) {
+      loadJobs();
+    }
   }, [currentUser, loadJobs]);
 
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const addJob = async (job: Omit<Job, 'id'>) => {
-    if (!currentUser?.email) return;
+    if (!currentUser?.email || !mountedRef.current) return;
 
     try {
-      console.log('[JOBS][ADD] Adding new job:', job);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][ADD] Adding new job:', job);
+      }
       const applicationData = {
         title: job.title,
         company: job.company,
@@ -102,21 +132,32 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       
       const newApplication = await emailApplicationsAPI.createApplication(currentUser.email, applicationData);
-      console.log('[JOBS][ADD] Job added successfully:', newApplication);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][ADD] Job added successfully:', newApplication);
+      }
       
-      // Reload jobs to get the latest data
-      await loadJobs();
+      // Reset loading guard to allow refresh and reload jobs
+      hasLoadedRef.current = false;
+      if (mountedRef.current) {
+        await loadJobs();
+      }
     } catch (err) {
-      console.error('[JOBS][ERROR] Failed to add job:', err);
-      setError('Failed to add job application');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[JOBS][ERROR] Failed to add job:', err);
+      }
+      if (mountedRef.current) {
+        setError('Failed to add job application');
+      }
     }
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
-    if (!currentUser?.email) return;
+    if (!currentUser?.email || !mountedRef.current) return;
 
     try {
-      console.log('[JOBS][UPDATE] Updating job:', id, updates);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][UPDATE] Updating job:', id, updates);
+      }
       
       const applicationUpdates = {
         title: updates.title,
@@ -126,29 +167,49 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       
       await emailApplicationsAPI.updateApplication(currentUser.email, id, applicationUpdates);
-      console.log('[JOBS][UPDATE] Job updated successfully');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][UPDATE] Job updated successfully');
+      }
       
-      // Reload jobs to get the latest data
-      await loadJobs();
+      // Reset loading guard to allow refresh and reload jobs
+      hasLoadedRef.current = false;
+      if (mountedRef.current) {
+        await loadJobs();
+      }
     } catch (err) {
-      console.error('[JOBS][ERROR] Failed to update job:', err);
-      setError('Failed to update job application');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[JOBS][ERROR] Failed to update job:', err);
+      }
+      if (mountedRef.current) {
+        setError('Failed to update job application');
+      }
     }
   };
 
   const deleteJob = async (id: string) => {
-    if (!currentUser?.email) return;
+    if (!currentUser?.email || !mountedRef.current) return;
 
     try {
-      console.log('[JOBS][DELETE] Deleting job:', id);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][DELETE] Deleting job:', id);
+      }
       await emailApplicationsAPI.deleteApplication(currentUser.email, id);
-      console.log('[JOBS][DELETE] Job deleted successfully');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][DELETE] Job deleted successfully');
+      }
       
-      // Reload jobs to get the latest data
-      await loadJobs();
+      // Reset loading guard to allow refresh and reload jobs
+      hasLoadedRef.current = false;
+      if (mountedRef.current) {
+        await loadJobs();
+      }
     } catch (err) {
-      console.error('[JOBS][ERROR] Failed to delete job:', err);
-      setError('Failed to delete job application');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[JOBS][ERROR] Failed to delete job:', err);
+      }
+      if (mountedRef.current) {
+        setError('Failed to delete job application');
+      }
     }
   };
 

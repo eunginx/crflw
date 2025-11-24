@@ -1,8 +1,8 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class OnboardingProgress {
   static async createOrUpdate(userId, progressData) {
-    const query = `
+    const sql = `
       INSERT INTO onboarding_progress (user_id, email_verified, resume_uploaded, profile_complete, settings_complete, current_step, completed_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (user_id) DO UPDATE SET
@@ -24,18 +24,18 @@ class OnboardingProgress {
       progressData.currentStep,
       progressData.completedAt
     ];
-    const result = await db.query(query, values);
+    const result = await dbQuery(sql, values);
     return result.rows[0];
   }
 
   static async findByUserId(userId) {
-    const query = 'SELECT * FROM onboarding_progress WHERE user_id = $1';
-    const result = await db.query(query, [userId]);
+    const sql = 'SELECT * FROM onboarding_progress WHERE user_id = $1';
+    const result = await dbQuery(sql, [userId]);
     return result.rows[0];
   }
 
   static async updateStep(userId, step) {
-    const query = `
+    const sql = `
       UPDATE onboarding_progress 
       SET current_step = $2, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = $1
@@ -46,21 +46,21 @@ class OnboardingProgress {
   }
 
   static async markComplete(userId) {
-    const query = `
+    const sql = `
       UPDATE onboarding_progress 
       SET completed_at = CURRENT_TIMESTAMP, current_step = 7, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = $1
       RETURNING *
     `;
-    const result = await db.query(query, [userId]);
+    const result = await dbQuery(sql, [userId]);
     return result.rows[0];
   }
 
   static async isComplete(userId) {
-    const query = 'SELECT completed_at IS NOT NULL as complete FROM onboarding_progress WHERE user_id = $1';
-    const result = await db.query(query, [userId]);
+    const queryText = 'SELECT completed_at IS NOT NULL as complete FROM onboarding_progress WHERE user_id = $1';
+    const result = await dbQuery(queryText, [userId]);
     return result.rows[0]?.complete || false;
   }
 }
 
-module.exports = OnboardingProgress;
+export default OnboardingProgress;

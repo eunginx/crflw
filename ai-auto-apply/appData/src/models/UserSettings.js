@@ -1,4 +1,4 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class UserSettings {
   static async createOrUpdate(userId, settingsData) {
@@ -35,10 +35,10 @@ class UserSettings {
         settingsData.onboarding_complete !== undefined ? (settingsData.onboarding_complete === 'true' || settingsData.onboarding_complete === true) : (settingsData.onboardingComplete !== undefined ? (settingsData.onboardingComplete === 'true' || settingsData.onboardingComplete === true) : false)
       ];
       
-      const updateResult = await db.query(updateQuery, updateValues);
+      const result = await dbQuery(updateQuery, values);
       
-      if (updateResult.rows.length > 0) {
-        return updateResult.rows[0];
+      if (result.rows.length > 0) {
+        return result.rows[0];
       }
       
       // If no rows were updated, insert new record
@@ -48,7 +48,7 @@ class UserSettings {
         RETURNING *
       `;
       
-      const insertResult = await db.query(insertQuery, updateValues);
+      const insertResult = await dbQuery(insertQuery, values);
       return insertResult.rows[0];
       
     } catch (error) {
@@ -58,10 +58,10 @@ class UserSettings {
   }
 
   static async findByUserId(userId) {
-    const query = 'SELECT * FROM user_settings WHERE user_id = $1';
-    const result = await db.query(query, [userId]);
+    const queryText = 'SELECT * FROM user_settings WHERE user_id = $1';
+    const result = await dbQuery(queryText, [userId]);
     return result.rows[0];
   }
 }
 
-module.exports = UserSettings;
+export default UserSettings;

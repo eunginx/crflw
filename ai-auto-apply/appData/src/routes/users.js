@@ -1,5 +1,5 @@
-const express = require('express');
-const User = require('../models/User');
+import express from 'express';
+import User from '../models/User.js';
 const router = express.Router();
 
 // Get or create user from Firebase UID
@@ -46,4 +46,4 @@ router.put('/email-verified', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const JobApplication = require('../models/JobApplication');
+import express from 'express';
+import User from '../models/User.js';
+import JobApplication from '../models/JobApplication.js';
 const router = express.Router();
 
 // Get all job applications for a user
@@ -108,4 +108,4 @@ router.get('/applications/:firebaseUid/status/:status', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

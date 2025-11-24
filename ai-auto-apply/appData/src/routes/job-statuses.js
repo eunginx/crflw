@@ -1,6 +1,6 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const JobStatusType = require('../models/JobStatusType');
+import JobStatusType from '../models/JobStatusType.js';
 
 // GET /api/job-statuses - Get all job statuses
 router.get('/', async (req, res) => {
@@ -139,4 +139,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

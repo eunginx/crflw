@@ -1,9 +1,9 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class UserProfileEmail {
   static async findByEmail(email) {
-    const query = 'SELECT * FROM user_profiles_email WHERE email = $1';
-    const result = await db.query(query, [email]);
+    const sql = 'SELECT * FROM user_profiles_email WHERE email = $1';
+    const result = await dbQuery(sql, [email]);
     return result.rows[0] || null;
   }
 
@@ -25,7 +25,7 @@ class UserProfileEmail {
       phone = null,
     } = profileData;
 
-    const query = `
+    const sql = `
       INSERT INTO user_profiles_email (
         email, headline, summary, location, resume_uploaded,
         resume_filename, resume_path, linkedin_url, github_url,
@@ -74,7 +74,7 @@ class UserProfileEmail {
   }
 
   static async updateResumeStatus(email, uploaded, filename = null, path = null) {
-    const query = `
+    const sql = `
       UPDATE user_profiles_email
       SET resume_uploaded = $2,
           resume_filename = $3,
@@ -83,9 +83,9 @@ class UserProfileEmail {
       WHERE email = $1
       RETURNING *
     `;
-    const result = await db.query(query, [email, uploaded, filename, path]);
+    const result = await dbQuery(sql, [email, uploaded, filename, path]);
     return result.rows[0] || null;
   }
 }
 
-module.exports = UserProfileEmail;
+export default UserProfileEmail;

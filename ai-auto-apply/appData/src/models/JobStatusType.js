@@ -1,10 +1,10 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class JobStatusType {
   static async findAll(options = {}) {
     const { includeHidden = false, category = null, groupLabel = null } = options;
     
-    let query = `
+    let sql = `
       SELECT * FROM job_status_types 
       WHERE 1=1
     `;
@@ -12,39 +12,39 @@ class JobStatusType {
     let paramIndex = 1;
     
     if (!includeHidden) {
-      query += ` AND hidden = FALSE`;
+      sql += ` AND hidden = FALSE`;
     }
     
     if (category) {
-      query += ` AND category = $${paramIndex++}`;
+      sql += ` AND category = $${paramIndex++}`;
       params.push(category);
     }
     
     if (groupLabel) {
-      query += ` AND group_label = $${paramIndex++}`;
+      sql += ` AND group_label = $${paramIndex++}`;
       params.push(groupLabel);
     }
     
-    query += ` ORDER BY sort_order ASC`;
+    sql += ` ORDER BY sort_order ASC`;
     
-    const result = await db.query(query, params);
+    const result = await dbQuery(sql, params);
     return result.rows;
   }
   
   static async findByKey(key) {
-    const query = 'SELECT * FROM job_status_types WHERE key = $1';
-    const result = await db.query(query, [key]);
+    const sql = 'SELECT * FROM job_status_types WHERE key = $1';
+    const result = await dbQuery(sql, [key]);
     return result.rows[0];
   }
   
   static async findById(id) {
-    const query = 'SELECT * FROM job_status_types WHERE id = $1';
-    const result = await db.query(query, [id]);
+    const sql = 'SELECT * FROM job_status_types WHERE id = $1';
+    const result = await dbQuery(sql, [id]);
     return result.rows[0];
   }
   
   static async create(statusData) {
-    const query = `
+    const sql = `
       INSERT INTO job_status_types (key, label, icon, color, description, sort_order, ui_classes, category, counts_towards, ai_advice, ai_next_step_action, timeline_icon, animation, hidden, experimental, group_label)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *
@@ -96,7 +96,7 @@ class JobStatusType {
       throw new Error('No fields to update');
     }
     
-    const query = `
+    const sql = `
       UPDATE job_status_types 
       SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = $1
@@ -109,7 +109,7 @@ class JobStatusType {
   }
   
   static async delete(id) {
-    const query = 'DELETE FROM job_status_types WHERE id = $1 RETURNING *';
+    const sql = 'DELETE FROM job_status_types WHERE id = $1 RETURNING *';
     const result = await db.query(query, [id]);
     return result.rows[0];
   }
@@ -117,21 +117,21 @@ class JobStatusType {
   static async getEnhancedStatuses(options = {}) {
     const { includeHidden = false } = options;
     
-    let query = 'SELECT * FROM job_statuses_enhanced';
+    let sql = 'SELECT * FROM job_statuses_enhanced';
     const values = [];
     
     if (!includeHidden) {
-      query += ' WHERE hidden = false';
+      sql += ' WHERE hidden = false';
     }
     
-    query += ' ORDER BY sort_order ASC';
+    sql += ' ORDER BY sort_order ASC';
     
-    const result = await db.query(query, values);
+    const result = await dbQuery(sql, values);
     return result.rows;
   }
   
   static async getStatusesByGroup() {
-    const query = `
+    const sql = `
       SELECT 
         group_label,
         json_agg(
@@ -149,12 +149,12 @@ class JobStatusType {
       ORDER BY group_label
     `;
     
-    const result = await db.query(query);
+    const result = await dbQuery(sql);
     return result.rows;
   }
   
   static async getAnalyticsData() {
-    const query = `
+    const sql = `
       SELECT 
         category,
         json_agg(
@@ -171,9 +171,9 @@ class JobStatusType {
       ORDER BY category
     `;
     
-    const result = await db.query(query);
+    const result = await dbQuery(sql);
     return result.rows;
   }
 }
 
-module.exports = JobStatusType;
+export default JobStatusType;

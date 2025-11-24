@@ -1,7 +1,11 @@
-const { spawn } = require('child_process');
-const fs = require('fs').promises;
-const path = require('path');
-const { pool } = require('../db');
+import { spawn } from 'child_process';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { pool } from '../db.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class PDFParseCLIService {
   constructor() {
@@ -580,4 +584,4 @@ class PDFParseCLIService {
   }
 }
 
-module.exports = PDFParseCLIService;
+export default PDFParseCLIService;

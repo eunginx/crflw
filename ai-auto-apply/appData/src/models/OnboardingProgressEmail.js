@@ -1,9 +1,9 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class OnboardingProgressEmail {
   static async findByEmail(email) {
-    const query = 'SELECT * FROM onboarding_progress_email WHERE email = $1';
-    const result = await db.query(query, [email]);
+    const sql = 'SELECT * FROM onboarding_progress_email WHERE email = $1';
+    const result = await dbQuery(sql, [email]);
     return result.rows[0] || null;
   }
 
@@ -18,7 +18,7 @@ class OnboardingProgressEmail {
       completed_at = null,
     } = progressData;
 
-    const query = `
+    const sql = `
       INSERT INTO onboarding_progress_email (
         email, email_verified, resume_uploaded, profile_complete,
         settings_complete, onboarding_complete, current_step, completed_at
@@ -52,7 +52,7 @@ class OnboardingProgressEmail {
   }
 
   static async updateStep(email, step) {
-    const query = `
+    const sql = `
       UPDATE onboarding_progress_email
       SET current_step = $2,
           updated_at = CURRENT_TIMESTAMP
@@ -64,7 +64,7 @@ class OnboardingProgressEmail {
   }
 
   static async markComplete(email) {
-    const query = `
+    const sql = `
       UPDATE onboarding_progress_email
       SET settings_complete = TRUE,
           profile_complete = TRUE,
@@ -74,9 +74,9 @@ class OnboardingProgressEmail {
       WHERE email = $1
       RETURNING *
     `;
-    const result = await db.query(query, [email]);
+    const result = await dbQuery(sql, [email]);
     return result.rows[0] || null;
   }
 }
 
-module.exports = OnboardingProgressEmail;
+export default OnboardingProgressEmail;

@@ -150,18 +150,27 @@ export class DocumentManagementService {
    * Get active document for a user
    */
   static async getActiveDocument(userId: string): Promise<Document | null> {
-    const response = await fetch(`${this.API_BASE_URL}/api/documents/users/${userId}/active`);
+    try {
+      const response = await fetch(`${this.API_BASE_URL}/api/documents/users/${userId}/active`);
 
-    if (response.status === 404) {
+      if (response.status === 404) {
+        // Expected for first-time users - no error logging needed
+        return null;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to get active document');
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      // Only log unexpected errors, not network failures for expected 404s
+      if (error instanceof Error && error.message !== 'Failed to get active document') {
+        console.warn('Document check failed (expected for new users):', error.message);
+      }
       return null;
     }
-
-    if (!response.ok) {
-      throw new Error('Failed to get active document');
-    }
-
-    const result = await response.json();
-    return result.data || result;
   }
 
   /**

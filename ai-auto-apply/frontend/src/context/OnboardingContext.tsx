@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { userAPI, profileAPI, settingsAPI, emailUserDataAPI } from '../services/apiService';
 import { useAuth } from './AuthContext';
 import { checkMigrationNeeded, migrateToPostgreSQL } from '../utils/migration';
@@ -64,6 +64,10 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [loading, setLoading] = useState(true);
   const firebaseUid = currentUser?.uid || null;
   const userEmail = currentUser?.email || null;
+  
+  // Prevent duplicate initialization
+  const hasLoadedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const updateStep = (step: number) => {
     setCurrentStep(step);
@@ -88,7 +92,9 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         });
       } catch (error) {
-        console.error('Failed to update onboarding data:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to update onboarding data:', error);
+        }
       }
     }
   };
@@ -125,22 +131,37 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const checkOnboardingStatus = async () => {
-    console.log('[ONBOARDING][CHECK] Checking onboarding status from PostgreSQL...');
+    if (!userEmail || hasLoadedRef.current) {
+      if (!userEmail && mountedRef.current) {
+        setLoading(false);
+      }
+      return;
+    }
+    
+    hasLoadedRef.current = true;
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ONBOARDING][CHECK] Checking onboarding status from PostgreSQL...');
+    }
     
     // Check for migration and clean up localStorage if needed
     if (checkMigrationNeeded()) {
-      console.log('[ONBOARDING][CHECK] Migrating localStorage data to PostgreSQL...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ONBOARDING][CHECK] Migrating localStorage data to PostgreSQL...');
+      }
       migrateToPostgreSQL();
     }
 
     // Load onboarding data from PostgreSQL API
-    if (userEmail) {
+    if (userEmail && mountedRef.current) {
       try {
-        console.log('[ONBOARDING][CHECK] Loading data from API for user:', userEmail);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[ONBOARDING][CHECK] Loading data from API for user:', userEmail);
+        }
         const userData = await emailUserDataAPI.getUserData(userEmail);
 
         // Update onboarding data from API
-        if (userData?.onboarding) {
+        if (userData?.onboarding && mountedRef.current) {
           const onboarding = userData.onboarding;
           setOnboardingData(prev => ({
             ...prev,
@@ -159,20 +180,39 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           (userData?.onboarding?.profile_complete || false) &&
           (userData?.onboarding?.settings_complete || false);
         
-        setIsOnboardingComplete(allComplete);
-        console.log('[ONBOARDING][CHECK] Onboarding data loaded successfully');
+        if (mountedRef.current) {
+          setIsOnboardingComplete(allComplete);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[ONBOARDING][CHECK] Onboarding data loaded successfully');
+          }
+        }
       } catch (error) {
-        console.error('[ONBOARDING][CHECK] Failed to load onboarding data from API:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[ONBOARDING][CHECK] Failed to load onboarding data from API:', error);
+        }
       }
     } else {
-      console.log('[ONBOARDING][CHECK] No user email, using defaults');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ONBOARDING][CHECK] No user email, using defaults');
+      }
+    }
+    
+    if (mountedRef.current) {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    checkOnboardingStatus();
-    setLoading(false);
+    if (mountedRef.current) {
+      checkOnboardingStatus();
+    }
   }, [userEmail]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   return (
     <OnboardingContext.Provider

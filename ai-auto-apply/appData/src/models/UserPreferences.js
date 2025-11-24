@@ -1,8 +1,8 @@
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class UserPreferences {
   static async createOrUpdate(userId, preferencesData) {
-    const query = `
+    const queryText = `
       INSERT INTO user_preferences (user_id, theme, language, timezone, email_notifications, push_notifications, ui_preferences)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (user_id) DO UPDATE SET
@@ -24,15 +24,15 @@ class UserPreferences {
       preferencesData.pushNotifications ?? true,
       JSON.stringify(preferencesData.uiPreferences || {})
     ];
-    const result = await db.query(query, values);
+    const result = await dbQuery(queryText, values);
     return result.rows[0];
   }
 
   static async findByUserId(userId) {
-    const query = 'SELECT * FROM user_preferences WHERE user_id = $1';
-    const result = await db.query(query, [userId]);
+    const queryText = 'SELECT * FROM user_preferences WHERE user_id = $1';
+    const result = await dbQuery(queryText, [userId]);
     return result.rows[0];
   }
 }
 
-module.exports = UserPreferences;
+export default UserPreferences;

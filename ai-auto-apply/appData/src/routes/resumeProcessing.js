@@ -1,4 +1,4 @@
-const { pool } = require('../db');
+import { pool } from '../db.js';
 
 // Store processed resume data
 async function storeProcessedResume(req, res) {
@@ -235,7 +235,7 @@ async function getResumeProcessingSummary(req, res) {
   }
 }
 
-module.exports = {
+export {
   storeProcessedResume,
   getProcessedResume,
   getUserProcessedResumes,

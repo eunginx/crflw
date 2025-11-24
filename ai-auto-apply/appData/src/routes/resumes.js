@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const ResumeFile = require('../models/ResumeFile');
+import express from 'express';
+import User from '../models/User.js';
+import ResumeFile from '../models/ResumeFile.js';
 const router = express.Router();
 
 // Get all resume files for a user
@@ -84,4 +84,4 @@ router.delete('/resumes/:firebaseUid/:resumeId', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const {
+import {
   storeFirebaseFileMetadata,
   storeFirebaseProcessedResume,
   getUserFirebaseFiles,
@@ -10,7 +10,7 @@ const {
   softDeleteFirebaseFile,
   getFirebaseProcessingStatistics,
   getFirebaseResumeSummary
-} = require('./firebaseMetadata');
+} from './firebaseMetadata.js';
 
 // Store Firebase file metadata
 router.post('/firebase/metadata', async (req, res) => {
@@ -66,4 +66,4 @@ router.get('/firebase/health', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

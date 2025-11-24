@@ -1,7 +1,7 @@
 // Email-based Job Applications API Routes
-const express = require('express');
-const UserEmail = require('../models/UserEmail');
-const JobApplicationEmail = require('../models/JobApplicationEmail');
+import express from 'express';
+import UserEmail from '../models/UserEmail.js';
+import JobApplicationEmail from '../models/JobApplicationEmail.js';
 const router = express.Router();
 
 // Get all applications for a user by email
@@ -321,4 +321,4 @@ router.get('/applications/:email/company/:company', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,5 +1,5 @@
-// Use the stable v1 API to avoid worker configuration issues
-const pdfParse = require('pdf-parse');
+// Use pdf-parse v2.2.2 with named export
+import { pdf } from 'pdf-parse';
 
 export interface ResumeData {
   id: string;
@@ -33,9 +33,9 @@ export class PDFParserService {
   static async extractText(buffer: Uint8Array): Promise<string> {
     try {
       console.log('Extracting text from PDF using v1 API...');
-      const result = await pdfParse(buffer);
-      console.log('Text extracted:', result.text.length, 'characters');
-      return result.text;
+      const result = await pdf(buffer);
+      console.log('Text extracted:', result.text?.length || 0, 'characters');
+      return result.text || '';
     } catch (error) {
       console.error('PDF text extraction failed:', error);
       throw new Error('Failed to extract text from PDF: ' + (error as Error).message);
@@ -46,12 +46,12 @@ export class PDFParserService {
    * Generate PNG preview - not available in v1 API
    */
   static async generatePNGPreview(buffer: Uint8Array, scale: number = 1.5): Promise<string | undefined> {
-    console.log('PNG generation not available in v1 API - skipping');
+    console.log('PNG generation not available in v2 API - skipping');
     return undefined;
   }
 
   /**
-   * Extract PDF metadata - limited in v1 API
+   * Extract PDF metadata using v1 API
    */
   static async extractMetadata(buffer: Uint8Array): Promise<{
     totalPages: number;
@@ -63,7 +63,7 @@ export class PDFParserService {
     try {
       console.log('Extracting PDF metadata using v1 API...');
       
-      const result = await pdfParse(buffer);
+      const result = await pdf(buffer);
       
       // v1 API has limited metadata - estimate pages from text
       const words = result.text.trim().split(/\s+/).filter((word: string) => word.length > 0);

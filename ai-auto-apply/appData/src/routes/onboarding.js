@@ -1,6 +1,6 @@
-const express = require('express');
-const User = require('../models/User');
-const OnboardingProgress = require('../models/OnboardingProgress');
+import express from 'express';
+import User from '../models/User.js';
+import OnboardingProgress from '../models/OnboardingProgress.js';
 const router = express.Router();
 
 // Get onboarding progress
@@ -81,4 +81,4 @@ router.post('/:firebaseUid/complete', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

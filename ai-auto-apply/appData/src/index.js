@@ -1,24 +1,33 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+import { JSDOM } from 'jsdom';
 
-const userRoutes = require('./routes/users');
-const profileRoutes = require('./routes/profiles');
-const settingsRoutes = require('./routes/settings');
-const onboardingRoutes = require('./routes/onboarding');
-const applicationRoutes = require('./routes/applications');
-const preferencesRoutes = require('./routes/preferences');
-const resumeRoutes = require('./routes/resumes');
+// Setup DOM polyfills for pdf-parse BEFORE any other imports
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+global.DOMMatrix = dom.window.DOMMatrix;
+global.ImageData = dom.window.ImageData;
+global.Path2D = dom.window.Path2D;
+
+import express from 'express';
+import cors from 'cors';
+import 'dotenv/config';
+
+import userRoutes from './routes/users.js';
+import profileRoutes from './routes/profiles.js';
+import settingsRoutes from './routes/settings.js';
+import onboardingRoutes from './routes/onboarding.js';
+import applicationRoutes from './routes/applications.js';
+import preferencesRoutes from './routes/preferences.js';
+import resumeRoutes from './routes/resumes.js';
 
 // Email-based routes (new schema)
-const settingsEmailRoutes = require('./routes/settings-email');
-const applicationsEmailRoutes = require('./routes/applications-email');
-const emailUserDataRoutes = require('./routes/email-user-data');
-const resumesEmailRoutes = require('./routes/resumes-email');
-const resumeProcessingRoutes = require('./routes/resumeProcessingRoutes');
-const firebaseMetadataRoutes = require('./routes/firebaseMetadataRoutes');
-const documentManagementRoutes = require('./routes/documentManagementRoutes');
-const jobStatusRoutes = require('./routes/job-statuses');
+import settingsEmailRoutes from './routes/settings-email.js';
+import applicationsEmailRoutes from './routes/applications-email.js';
+import emailUserDataRoutes from './routes/email-user-data.js';
+import resumesEmailRoutes from './routes/resumes-email.js';
+import resumeProcessingRoutes from './routes/resumeProcessingRoutes.js';
+import firebaseMetadataRoutes from './routes/firebaseMetadataRoutes.js';
+import documentManagementRoutes from './routes/documentManagementRoutes.js';
+import jobStatusRoutes from './routes/job-statuses.js';
+// import pdfRoutes from './routes/pdfRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -39,6 +48,15 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    service: 'app-data-api'
+  });
+});
+
+// Add API health endpoint for frontend compatibility
+app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
@@ -84,6 +102,10 @@ console.log('[DEBUG] Document management routes registered');
 app.use('/api/job-statuses', jobStatusRoutes);
 console.log('[DEBUG] Job status routes registered');
 
+// PDF Processing Routes
+// app.use('/api/pdf', pdfRoutes);
+console.log('[DEBUG] PDF processing routes disabled temporarily');
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('🚨 Error:', err);
@@ -108,4 +130,4 @@ app.listen(PORT, () => {
   console.log(`🔗 API base URL: http://localhost:${PORT}/api`);
 });
 
-module.exports = app;
+export default app;

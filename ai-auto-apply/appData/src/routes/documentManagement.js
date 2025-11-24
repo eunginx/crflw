@@ -1,15 +1,19 @@
-const PDFParseCLIService = require('../services/pdfParseCLIService');
-// const ResumeProcessingService = require('../services/resumeProcessingService'); // Temporarily disabled
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
-const { pool } = require('../db');
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import fsPromises from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { pool } from '../db.js';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const uploadDir = path.join(__dirname, '../../uploads/documents');
-    await fs.mkdir(uploadDir, { recursive: true });
+    await fsPromises.mkdir(uploadDir, { recursive: true });
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
@@ -34,7 +38,7 @@ const upload = multer({
   }
 });
 
-const pdfService = new PDFParseCLIService();
+// const pdfService = new PDFParseCLIService();
 // const resumeProcessor = new ResumeProcessingService(); // Temporarily disabled
 
 // Upload document
@@ -135,7 +139,8 @@ async function getActiveDocument(req, res) {
   const { userId } = req.params;
 
   try {
-    const result = await pool.query(
+    // First try to get explicitly active document
+    let result = await pool.query(
       `SELECT d.*, dpr.processed_at, dpr.text_length, dpr.word_count, dpr.pdf_total_pages
        FROM documents d
        LEFT JOIN document_processing_results dpr ON d.id = dpr.document_id
@@ -147,9 +152,25 @@ async function getActiveDocument(req, res) {
       [userId]
     );
 
+    // If no explicitly active document, get the most recent resume
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT d.*, dpr.processed_at, dpr.text_length, dpr.word_count, dpr.pdf_total_pages
+         FROM documents d
+         LEFT JOIN document_processing_results dpr ON d.id = dpr.document_id
+         WHERE d.user_id = $1 
+           AND d.document_type = 'resume' 
+           AND d.deleted_at IS NULL
+         ORDER BY d.uploaded_at DESC
+         LIMIT 1`,
+        [userId]
+      );
+    }
+
     if (result.rows.length === 0) {
       return res.status(404).json({
-        error: 'No active document found for this user'
+        error: 'No resume document found for this user',
+        suggestion: 'Upload a resume document first'
       });
     }
 
@@ -225,38 +246,36 @@ async function getDocumentProcessingResults(req, res) {
       });
     }
 
-    // Get resume data from new service
-    // const resumeData = await resumeProcessor.getResumeData(document.user_id);
-    
-    // For now, return a mock response to avoid breaking the frontend
-    const resumeData = {
-      extractedText: "Resume processing temporarily disabled",
-      textLength: 35,
-      processedAt: new Date().toISOString(),
-      filename: document.original_filename,
-      totalPages: 1,
-      pdfInfo: { info: {} }
-    };
+    // Get actual processing results from database
+    const processingResult = await pool.query(
+      `SELECT dpr.*, d.original_filename
+       FROM document_processing_results dpr
+       JOIN documents d ON dpr.document_id = d.id
+       WHERE dpr.document_id = $1`,
+      [documentId]
+    );
 
-    if (!resumeData) {
+    if (processingResult.rows.length === 0) {
       return res.status(404).json({
         error: 'No processing results found for this document'
       });
     }
 
+    const result = processingResult.rows[0];
+
     // Format response to match expected frontend structure
     const responseData = {
-      extractedText: resumeData.extractedText,
-      textLength: resumeData.textLength,
-      processedAt: resumeData.processedAt,
-      filename: resumeData.filename,
-      pdfTotalPages: resumeData.totalPages,
-      pdfTitle: resumeData.pdfInfo?.info?.Title,
-      pdfAuthor: resumeData.pdfInfo?.info?.Author,
-      pdfCreator: resumeData.pdfInfo?.info?.Creator,
-      pdfProducer: resumeData.pdfInfo?.info?.Producer,
-      screenshotPath: resumeData.screenshotPath,
-      textFilePath: resumeData.textFilePath
+      extractedText: result.extracted_text || '',
+      textLength: result.text_length || 0,
+      processedAt: result.processed_at,
+      filename: result.original_filename || document.original_filename,
+      pdfTotalPages: result.pdf_total_pages || 0,
+      pdfTitle: result.pdf_title,
+      pdfAuthor: result.pdf_author,
+      pdfCreator: result.pdf_creator,
+      pdfProducer: result.pdf_producer,
+      screenshotPath: result.screenshot_path,
+      textFilePath: null // TODO: Implement text file export
     };
 
     res.json({
@@ -299,28 +318,188 @@ async function processDocument(req, res) {
       });
     }
 
+    // Check if file exists using robust path resolution
+    let actualFilePath = document.file_path;
+    
+    // If the stored path is relative, make it absolute
+    if (!path.isAbsolute(document.file_path)) {
+      actualFilePath = path.join(process.cwd(), 'appData', document.file_path);
+    }
+    
+    console.log("Document ID:", documentId);
+    console.log("Original file path from DB:", document.file_path);
+    console.log("Resolved file path:", actualFilePath);
+    
     // Check if file exists
     try {
-      await fs.access(document.file_path);
+      await fsPromises.access(actualFilePath);
+      console.log("✅ File exists and is accessible");
     } catch (fileError) {
-      return res.status(404).json({
-        error: 'Document file not found on disk'
+      console.error("❌ File access error:", fileError);
+      console.error("❌ Attempted path:", actualFilePath);
+      
+      // Try alternative path resolution
+      const alternativePath = path.join(__dirname, '../../uploads/documents', path.basename(document.file_path));
+      console.log("🔄 Trying alternative path:", alternativePath);
+      
+      try {
+        await fsPromises.access(alternativePath);
+        console.log("✅ File found at alternative path");
+        actualFilePath = alternativePath;
+      } catch (altError) {
+        console.error("❌ Alternative path also failed");
+        return res.status(404).json({
+          error: 'Document file not found on disk',
+          details: fileError.message,
+          originalPath: document.file_path,
+          attemptedPath: actualFilePath,
+          alternativePath: alternativePath
+        });
+      }
+    }
+    
+    // Read the PDF file using resolved path
+    const dataBuffer = fs.readFileSync(actualFilePath);
+    console.log("Uploaded file size:", dataBuffer.length);
+    
+    if (dataBuffer.length === 0) {
+      return res.status(400).json({
+        error: 'PDF file is empty'
       });
     }
-
-    // Process resume using new service
-    // const result = await resumeProcessor.processResume(
-    //   document.user_id,
-    //   documentId,
-    //   document.file_path
-    // );
     
-    // For now, return a mock response
+    // Import and use the corrected PDFParse class
+    const { parseResume } = await import('../services/pdfParserService.js');
+    
+    // Parse the PDF using the corrected v2.4.5 API
+    const pdfResult = await parseResume(actualFilePath);
+    console.log("PDF parsing completed, text length:", pdfResult.text?.length || 0);
+    console.log("📸 Screenshot generated:", !!pdfResult.previewImageBase64);
+    
+    // Save screenshot to file if available
+    let screenshotPath = null;
+    if (pdfResult.previewImageBase64) {
+      try {
+        // Create screenshots directory if it doesn't exist
+        const screenshotsDir = path.join(__dirname, '../../uploads/screenshots');
+        await fsPromises.mkdir(screenshotsDir, { recursive: true });
+        
+        // Generate unique filename
+        const screenshotFilename = `screenshot-${documentId}-${Date.now()}.png`;
+        screenshotPath = path.join(screenshotsDir, screenshotFilename);
+        
+        // Convert base64 to buffer and save
+        let base64Data = pdfResult.previewImageBase64;
+        if (typeof base64Data === 'string') {
+          base64Data = base64Data.replace(/^data:image\/png;base64,/, '');
+        }
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+        await fsPromises.writeFile(screenshotPath, imageBuffer);
+        
+        // Store relative path for frontend access
+        screenshotPath = `/uploads/screenshots/${screenshotFilename}`;
+        console.log("✅ Screenshot saved to:", screenshotPath);
+      } catch (screenshotError) {
+        console.error("❌ Failed to save screenshot:", screenshotError);
+        screenshotPath = null;
+      }
+    }
+    
+    // Store processing results in database
+    await pool.query(
+      `UPDATE documents 
+       SET processing_status = 'completed', 
+           processed_at = NOW()
+       WHERE id = $1`,
+      [documentId]
+    );
+    
+    // Extract PDF metadata from info object
+    const pdfInfo = pdfResult.info || {};
+    const pdfTitle = pdfInfo.Title || null;
+    const pdfAuthor = pdfInfo.Author || null;
+    const pdfCreator = pdfInfo.Creator || null;
+    const pdfProducer = pdfInfo.Producer || null;
+    
+    console.log('📋 PDF Metadata extracted:', {
+      title: pdfTitle,
+      author: pdfAuthor,
+      creator: pdfCreator,
+      producer: pdfProducer,
+      totalInfo: Object.keys(pdfInfo)
+    });
+
+    // Store detailed processing results
+    const existingResult = await pool.query(
+      'SELECT id FROM document_processing_results WHERE document_id = $1',
+      [documentId]
+    );
+    
+    if (existingResult.rows.length > 0) {
+      // Update existing record
+      await pool.query(
+        `UPDATE document_processing_results 
+         SET extracted_text = $1, text_length = $2, word_count = $3, pdf_total_pages = $4, 
+             pdf_title = $5, pdf_author = $6, pdf_creator = $7, pdf_producer = $8, 
+             screenshot_path = $9, processed_at = NOW()
+         WHERE document_id = $10`,
+        [
+          pdfResult.text || '',
+          pdfResult.text?.length || 0,
+          pdfResult.text?.split(/\s+/).filter(word => word.length > 0).length || 0,
+          pdfResult.numPages || 0,
+          pdfTitle,
+          pdfAuthor,
+          pdfCreator,
+          pdfProducer,
+          screenshotPath,
+          documentId
+        ]
+      );
+    } else {
+      // Insert new record
+      await pool.query(
+        `INSERT INTO document_processing_results (
+          document_id, 
+          extracted_text,
+          text_length, 
+          word_count, 
+          pdf_total_pages,
+          pdf_title,
+          pdf_author,
+          pdf_creator,
+          pdf_producer,
+          screenshot_path,
+          processed_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+        [
+          documentId,
+          pdfResult.text || '',
+          pdfResult.text?.length || 0,
+          pdfResult.text?.split(/\s+/).filter(word => word.length > 0).length || 0,
+          pdfResult.numPages || 0,
+          pdfTitle,
+          pdfAuthor,
+          pdfCreator,
+          pdfProducer,
+          screenshotPath
+        ]
+      );
+    }
+    
     const result = {
       data: {
-        message: "Resume processing temporarily disabled",
-        extractedText: "Resume processing temporarily disabled",
-        textLength: 35
+        message: "Resume processed successfully",
+        extractedText: pdfResult.text || '',
+        textLength: pdfResult.text?.length || 0,
+        numPages: pdfResult.numPages || 0,
+        info: pdfResult.info || {},
+        pdfTotalPages: pdfResult.numPages || 0,
+        pdfTitle: pdfTitle,
+        pdfAuthor: pdfAuthor,
+        pdfCreator: pdfCreator,
+        pdfProducer: pdfProducer,
+        screenshotPath: screenshotPath
       }
     };
 
@@ -618,9 +797,9 @@ async function processQueue() {
 }
 
 // Start background queue processor
-setInterval(processQueue, 30000); // Process queue every 30 seconds
+setInterval(processQueue, 30000); // Process queue every 30 seconds}
 
-module.exports = {
+export {
   uploadDocument,
   getUserDocuments,
   getActiveDocument,

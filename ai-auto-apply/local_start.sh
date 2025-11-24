@@ -7,6 +7,18 @@ set -e
 
 echo "🚀 Starting AI Auto Apply Local Environment..."
 
+# Ensure correct Node version
+REQUIRED_NODE_MAJOR=20
+NODE_MAJOR=$(node -v | sed 's/v\([0-9]*\).*/\1/')
+
+if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
+  echo "❌ Node $REQUIRED_NODE_MAJOR+ is required. You are running Node $(node -v)."
+  echo "👉 Please run: nvm install 20 && nvm use 20"
+  exit 1
+fi
+
+echo "✅ Node version check passed: $(node -v)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

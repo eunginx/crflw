@@ -1,9 +1,9 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const UserEmail = require('../models/UserEmail');
-const UserProfileEmail = require('../models/UserProfileEmail');
-const UserSettingsEmail = require('../models/UserSettingsEmail');
-const OnboardingProgressEmail = require('../models/OnboardingProgressEmail');
+import UserEmail from '../models/UserEmail.js';
+import UserProfileEmail from '../models/UserProfileEmail.js';
+import UserSettingsEmail from '../models/UserSettingsEmail.js';
+import OnboardingProgressEmail from '../models/OnboardingProgressEmail.js';
 
 console.log('[DEBUG] email-user-data-fixed route loaded');
 
@@ -193,4 +193,4 @@ router.put('/user-data/:email/firebase-uid', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

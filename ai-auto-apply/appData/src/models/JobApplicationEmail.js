@@ -1,36 +1,36 @@
 // Email-based Job Applications Model
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class JobApplicationEmail {
   // Get all applications for a user
   static async findByEmail(email) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email]);
+    const result = await dbQuery(sql, [email]);
     return result.rows;
   }
 
   // Get applications by status for a user
   static async findByEmailAndStatus(email, status) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 AND status = $2 
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email, status]);
+    const result = await dbQuery(sql, [email, status]);
     return result.rows;
   }
 
   // Get application by ID for a user
   static async findByIdAndEmail(id, email) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE id = $1 AND email = $2
     `;
-    const result = await db.query(query, [id, email]);
+    const result = await dbQuery(sql, [id, email]);
     return result.rows[0] || null;
   }
 
@@ -51,7 +51,7 @@ class JobApplicationEmail {
       priority = 'medium'
     } = applicationData;
 
-    const query = `
+    const sql = `
       INSERT INTO job_applications_email (
         email, title, company, status, applied_date, job_url,
         description, salary_min, salary_max, location, notes, source, priority
@@ -60,7 +60,7 @@ class JobApplicationEmail {
       RETURNING *
     `;
     
-    const result = await db.query(query, [
+    const result = await dbQuery(sql, [
       email, title, company, status, applied_date, job_url,
       description, salary_min, salary_max, location, notes, source, priority
     ]);
@@ -75,27 +75,27 @@ class JobApplicationEmail {
       .map((field, index) => `${field} = $${index + 3}`)
       .join(', ');
 
-    const query = `
+    const sql = `
       UPDATE job_applications_email 
       SET ${setClause}, updated_at = CURRENT_TIMESTAMP
       WHERE id = $1 AND email = $2
       RETURNING *
     `;
     
-    const result = await db.query(query, [id, email, ...values]);
+    const result = await dbQuery(sql, [id, email, ...values]);
     return result.rows[0] || null;
   }
 
   // Delete application
   static async delete(id, email) {
-    const query = 'DELETE FROM job_applications_email WHERE id = $1 AND email = $2';
-    const result = await db.query(query, [id, email]);
+    const sql = 'DELETE FROM job_applications_email WHERE id = $1 AND email = $2';
+    const result = await dbQuery(sql, [id, email]);
     return result.rowCount > 0;
   }
 
   // Get application statistics for a user
   static async getStatsByEmail(email) {
-    const query = `
+    const sql = `
       SELECT 
         COUNT(*) as total_applications,
         COUNT(CASE WHEN status = 'saved' THEN 1 END) as saved,
@@ -107,60 +107,60 @@ class JobApplicationEmail {
       FROM job_applications_email 
       WHERE email = $1
     `;
-    const result = await db.query(query, [email]);
+    const result = await dbQuery(sql, [email]);
     return result.rows[0];
   }
 
   // Get recent applications for a user
   static async getRecentByEmail(email, limit = 10) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 
       ORDER BY created_at DESC 
       LIMIT $2
     `;
-    const result = await db.query(query, [email, limit]);
+    const result = await dbQuery(sql, [email, limit]);
     return result.rows;
   }
 
   // Get applications by company for a user
   static async findByEmailAndCompany(email, company) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 AND company ILIKE $2 
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email, `%${company}%`]);
+    const result = await dbQuery(sql, [email, `%${company}%`]);
     return result.rows;
   }
 
   // Search applications for a user
   static async searchByEmail(email, searchTerm) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 
       AND (title ILIKE $2 OR company ILIKE $2 OR description ILIKE $2 OR notes ILIKE $2)
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email, `%${searchTerm}%`]);
+    const result = await dbQuery(sql, [email, `%${searchTerm}%`]);
     return result.rows;
   }
 
   // Get applications by date range for a user
   static async findByEmailAndDateRange(email, startDate, endDate) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 
       AND created_at >= $2 AND created_at <= $3
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email, startDate, endDate]);
+    const result = await dbQuery(sql, [email, startDate, endDate]);
     return result.rows;
   }
 
   // Get application trends (global analytics)
   static async getApplicationTrends(days = 30) {
-    const query = `
+    const sql = `
       SELECT 
         DATE(created_at) as date,
         COUNT(*) as applications,
@@ -170,13 +170,13 @@ class JobApplicationEmail {
       GROUP BY DATE(created_at)
       ORDER BY date DESC
     `;
-    const result = await db.query(query);
+    const result = await dbQuery(query);
     return result.rows;
   }
 
   // Get popular companies (global analytics)
   static async getPopularCompanies(limit = 20) {
-    const query = `
+    const sql = `
       SELECT 
         company,
         COUNT(*) as application_count,
@@ -187,13 +187,13 @@ class JobApplicationEmail {
       ORDER BY application_count DESC
       LIMIT $1
     `;
-    const result = await db.query(query, [limit]);
+    const result = await dbQuery(sql, [limit]);
     return result.rows;
   }
 
   // Update application status
   static async updateStatus(id, email, newStatus) {
-    const query = `
+    const sql = `
       UPDATE job_applications_email 
       SET status = $1, 
           applied_date = CASE 
@@ -205,20 +205,20 @@ class JobApplicationEmail {
       RETURNING *
     `;
     
-    const result = await db.query(query, [newStatus, id, email]);
+    const result = await dbQuery(sql, [newStatus, id, email]);
     return result.rows[0] || null;
   }
 
   // Get applications by priority for a user
   static async findByEmailAndPriority(email, priority) {
-    const query = `
+    const sql = `
       SELECT * FROM job_applications_email 
       WHERE email = $1 AND priority = $2 
       ORDER BY created_at DESC
     `;
-    const result = await db.query(query, [email, priority]);
+    const result = await dbQuery(sql, [email, priority]);
     return result.rows;
   }
 }
 
-module.exports = JobApplicationEmail;
+export default JobApplicationEmail;

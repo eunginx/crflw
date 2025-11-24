@@ -1,13 +1,13 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const {
+import {
   storeProcessedResume,
   getProcessedResume,
   getUserProcessedResumes,
   getSkillsStatistics,
   deleteProcessedResume,
   getResumeProcessingSummary
-} = require('./resumeProcessing');
+} from './resumeProcessing.js';
 
 // Store processed resume data
 router.post('/resumes/:resumeId/process', async (req, res) => {
@@ -48,4 +48,4 @@ router.get('/health', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

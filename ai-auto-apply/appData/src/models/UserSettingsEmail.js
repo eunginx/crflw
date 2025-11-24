@@ -1,11 +1,11 @@
 // Email-based User Settings Model
-const db = require('../db');
+import { query as dbQuery } from '../db.js';
 
 class UserSettingsEmail {
   // Find settings by email
   static async findByEmail(email) {
-    const query = 'SELECT * FROM user_settings_email WHERE email = $1';
-    const result = await db.query(query, [email]);
+    const sql = 'SELECT * FROM user_settings_email WHERE email = $1';
+    const result = await dbQuery(sql, [email]);
     return result.rows[0] || null;
   }
 
@@ -47,7 +47,7 @@ class UserSettingsEmail {
         WHERE email = $12
         RETURNING *
       `;
-      const result = await db.query(updateQuery, [
+      const result = await dbQuery(updateQuery, [
         keywords, locations, salary_min, salary_max,
         enable_auto_apply, generate_cover_letters, apply_remote_only,
         max_applications_per_day, JSON.stringify(job_types),
@@ -65,7 +65,7 @@ class UserSettingsEmail {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
       `;
-      const result = await db.query(insertQuery, [
+      const result = await dbQuery(insertQuery, [
         email, keywords, locations, salary_min, salary_max,
         enable_auto_apply, generate_cover_letters, apply_remote_only,
         max_applications_per_day, JSON.stringify(job_types),
@@ -82,40 +82,40 @@ class UserSettingsEmail {
       .join(', ');
     
     const values = Object.values(fields);
-    const query = `
+    const sql = `
       UPDATE user_settings_email 
       SET ${setClause}, updated_at = CURRENT_TIMESTAMP
       WHERE email = $1
       RETURNING *
     `;
     
-    const result = await db.query(query, [email, ...values]);
+    const result = await dbQuery(sql, [email, ...values]);
     return result.rows[0] || null;
   }
 
   // Delete settings by email
   static async deleteByEmail(email) {
-    const query = 'DELETE FROM user_settings_email WHERE email = $1';
-    const result = await db.query(query, [email]);
+    const sql = 'DELETE FROM user_settings_email WHERE email = $1';
+    const result = await dbQuery(sql, [email]);
     return result.rowCount > 0;
   }
 
   // Get users with specific settings (for analytics)
   static async getUsersBySetting(settingName, settingValue) {
-    const query = `
+    const sql = `
       SELECT u.email, u.first_name, u.last_name, s.${settingName}
       FROM users_email u
       JOIN user_settings_email s ON u.email = s.email
       WHERE s.${settingName} = $1
       ORDER BY u.email
     `;
-    const result = await db.query(query, [settingValue]);
+    const result = await dbQuery(sql, [settingValue]);
     return result.rows;
   }
 
   // Get salary statistics
   static async getSalaryStats() {
-    const query = `
+    const sql = `
       SELECT 
         COUNT(*) as total_users,
         AVG(salary_min) as avg_min_salary,
@@ -125,13 +125,13 @@ class UserSettingsEmail {
       FROM user_settings_email 
       WHERE salary_min IS NOT NULL AND salary_max IS NOT NULL
     `;
-    const result = await db.query(query);
+    const result = await dbQuery(query);
     return result.rows[0];
   }
 
   // Get popular locations
   static async getPopularLocations(limit = 10) {
-    const query = `
+    const sql = `
       SELECT 
         TRIM(UNNEST(STRING_TO_ARRAY(locations, ','))) as location,
         COUNT(*) as count
@@ -141,13 +141,13 @@ class UserSettingsEmail {
       ORDER BY count DESC
       LIMIT $1
     `;
-    const result = await db.query(query, [limit]);
+    const result = await dbQuery(sql, [limit]);
     return result.rows;
   }
 
   // Get popular keywords
   static async getPopularKeywords(limit = 20) {
-    const query = `
+    const sql = `
       SELECT 
         TRIM(UNNEST(STRING_TO_ARRAY(keywords, ','))) as keyword,
         COUNT(*) as count
@@ -157,9 +157,9 @@ class UserSettingsEmail {
       ORDER BY count DESC
       LIMIT $1
     `;
-    const result = await db.query(query, [limit]);
+    const result = await dbQuery(sql, [limit]);
     return result.rows;
   }
 }
 
-module.exports = UserSettingsEmail;
+export default UserSettingsEmail;

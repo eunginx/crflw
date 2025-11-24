@@ -1,4 +1,4 @@
-const { pool } = require('../db');
+import { pool } from '../db.js';
 
 // Store Firebase file metadata
 async function storeFirebaseFileMetadata(req, res) {
@@ -315,7 +315,7 @@ async function getFirebaseResumeSummary(req, res) {
   }
 }
 
-module.exports = {
+export {
   storeFirebaseFileMetadata,
   storeFirebaseProcessedResume,
   getUserFirebaseFiles,

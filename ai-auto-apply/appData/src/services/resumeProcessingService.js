@@ -1,15 +1,7 @@
-const fs = require('fs').promises;
-const path = require('path');
-const { pool } = require('../db');
-
-// Setup DOM polyfill for pdf-parse BEFORE requiring it
-const { JSDOM } = require('jsdom');
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-global.DOMMatrix = dom.window.DOMMatrix;
-global.ImageData = dom.window.ImageData;
-global.Path2D = dom.window.Path2D;
-
-const pdfParse = require('pdf-parse');
+import fs from 'fs/promises';
+import path from 'path';
+import { pool } from '../db.js';
+import { PDFParse } from 'pdf-parse';
 
 class ResumeProcessingService {
   constructor() {
@@ -46,8 +38,11 @@ class ResumeProcessingService {
       // Read PDF file
       const dataBuffer = await fs.readFile(filePath);
       
-      // Parse PDF to extract text and metadata
-      const pdfData = await pdfParse(dataBuffer);
+      // Parse PDF to extract text using correct v2.4.5 API
+      const parser = new PDFParse({ data: dataBuffer });
+      const pdfData = await parser.getText();
+      const pdfInfo = await parser.getInfo({ parsePageInfo: true });
+      await parser.destroy();
 
       // Generate screenshot (first page as image)
       const screenshotPath = await this.generateScreenshot(documentId, filePath);
@@ -76,12 +71,8 @@ class ResumeProcessingService {
           pdfData.text,
           textFilePath,
           screenshotPath,
-          pdfData.numpages,
-          {
-            info: pdfData.info,
-            metadata: pdfData.metadata,
-            version: pdfData.version
-          },
+          pdfInfo.total || 0,
+          pdfInfo.info || {},
           path.basename(filePath),
           userId
         ]);
@@ -98,12 +89,8 @@ class ResumeProcessingService {
           pdfData.text,
           textFilePath,
           screenshotPath,
-          pdfData.numpages,
-          {
-            info: pdfData.info,
-            metadata: pdfData.metadata,
-            version: pdfData.version
-          },
+          pdfInfo.total || 0,
+          pdfInfo.info || {},
           path.basename(filePath)
         ]);
       }
@@ -125,12 +112,12 @@ class ResumeProcessingService {
           documentId,
           extractedText: pdfData.text,
           textLength: pdfData.text.length,
-          totalPages: pdfData.numpages,
+          totalPages: pdfInfo.total || 0,
           screenshotPath,
           textFilePath,
           processedAt: result.rows[0].processed_at,
           filename: path.basename(filePath),
-          pdfInfo: pdfData.info
+          pdfInfo: pdfInfo.info
         }
       };
 
@@ -151,25 +138,33 @@ class ResumeProcessingService {
   }
 
   /**
-   * Generate screenshot of PDF first page
-   * For now, we'll use a placeholder approach since pdf-parse doesn't generate images
-   * In a real implementation, you'd use a library like puppeteer or pdf-poppler
+   * Generate screenshot of PDF first page using pdf-parse v2.4.5
    */
   async generateScreenshot(documentId, filePath) {
     try {
-      // For now, create a placeholder image path
-      // In a full implementation, you'd use puppeteer or similar to capture PDF as image
       const screenshotFileName = `resume_${documentId}_page1.png`;
       const screenshotPath = path.join(this.assetsDir, 'screenshots', screenshotFileName);
 
-      // Create a placeholder file (in real implementation, generate actual screenshot)
-      await fs.writeFile(screenshotPath, 'placeholder-screenshot-data');
+      // Read PDF file
+      const dataBuffer = await fs.readFile(filePath);
       
-      console.log(`Screenshot placeholder created at: ${screenshotPath}`);
+      // Generate screenshot using pdf-parse v2.4.5 API
+      const parser = new PDFParse({ data: dataBuffer });
+      const screenshotResult = await parser.getScreenshot({ scale: 1.5 });
+      await parser.destroy();
+
+      // Save the first page screenshot
+      await fs.writeFile(screenshotPath, screenshotResult.pages[0].data);
+      
+      console.log(`Screenshot generated at: ${screenshotPath}`);
       return screenshotPath;
     } catch (error) {
       console.error('Error generating screenshot:', error);
-      throw error;
+      // Fallback to placeholder if screenshot generation fails
+      const screenshotFileName = `resume_${documentId}_page1.png`;
+      const screenshotPath = path.join(this.assetsDir, 'screenshots', screenshotFileName);
+      await fs.writeFile(screenshotPath, 'placeholder-screenshot-data');
+      return screenshotPath;
     }
   }
 
@@ -253,4 +248,4 @@ class ResumeProcessingService {
   }
 }
 
-module.exports = ResumeProcessingService;
+export default ResumeProcessingService;

@@ -1,7 +1,7 @@
 // Email-based User Settings API Routes
-const express = require('express');
-const UserEmail = require('../models/UserEmail');
-const UserSettingsEmail = require('../models/UserSettingsEmail');
+import express from 'express';
+import UserEmail from '../models/UserEmail.js';
+import UserSettingsEmail from '../models/UserSettingsEmail.js';
 const router = express.Router();
 
 // Get user settings by email
@@ -155,4 +155,4 @@ router.get('/settings/analytics/users/:setting/:value', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
