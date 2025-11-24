@@ -263,6 +263,29 @@ async function getDocumentProcessingResults(req, res) {
 
     const result = processingResult.rows[0];
 
+    // Get AI analysis if available
+    let analysisData = null;
+    try {
+      const analysisResult = await pool.query(
+        'SELECT * FROM resume_analysis WHERE document_id = $1',
+        [documentId]
+      );
+      
+      if (analysisResult.rows.length > 0) {
+        const analysis = analysisResult.rows[0];
+        analysisData = {
+          contactInfo: analysis.contact_info,
+          sections: analysis.sections_detected,
+          skills: analysis.skills,
+          qualityScore: analysis.quality_score,
+          recommendations: analysis.recommendations
+        };
+      }
+    } catch (analysisError) {
+      console.warn('Warning: Could not fetch AI analysis:', analysisError.message);
+      // Continue without analysis data
+    }
+
     // Format response to match expected frontend structure
     const responseData = {
       extractedText: result.extracted_text || '',
@@ -275,7 +298,8 @@ async function getDocumentProcessingResults(req, res) {
       pdfCreator: result.pdf_creator,
       pdfProducer: result.pdf_producer,
       screenshotPath: result.screenshot_path,
-      textFilePath: null // TODO: Implement text file export
+      textFilePath: null, // TODO: Implement text file export
+      analysis: analysisData
     };
 
     res.json({
@@ -441,7 +465,7 @@ async function processDocument(req, res) {
         `UPDATE document_processing_results 
          SET extracted_text = $1, text_length = $2, word_count = $3, pdf_total_pages = $4, 
              pdf_title = $5, pdf_author = $6, pdf_creator = $7, pdf_producer = $8, 
-             screenshot_path = $9, processed_at = NOW()
+             screenshot_path = $9, processed_at = NOW(), analysis_status = 'completed'
          WHERE document_id = $10`,
         [
           pdfResult.text || '',
@@ -470,8 +494,9 @@ async function processDocument(req, res) {
           pdf_creator,
           pdf_producer,
           screenshot_path,
-          processed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+          processed_at,
+          analysis_status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'completed')`,
         [
           documentId,
           pdfResult.text || '',
@@ -485,6 +510,18 @@ async function processDocument(req, res) {
           screenshotPath
         ]
       );
+    }
+
+    // Perform AI analysis if text was extracted
+    if (pdfResult.text && pdfResult.text.length > 100) {
+      try {
+        const ResumeAnalysisService = (await import('../services/resumeAnalysisService.js')).default;
+        await ResumeAnalysisService.analyzeResume(documentId, pdfResult.text);
+        console.log('✅ AI analysis completed for document:', documentId);
+      } catch (analysisError) {
+        console.error('❌ AI analysis failed:', analysisError);
+        // Don't fail the entire processing if analysis fails
+      }
     }
     
     const result = {

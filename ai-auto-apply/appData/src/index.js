@@ -27,6 +27,7 @@ import resumeProcessingRoutes from './routes/resumeProcessingRoutes.js';
 import firebaseMetadataRoutes from './routes/firebaseMetadataRoutes.js';
 import documentManagementRoutes from './routes/documentManagementRoutes.js';
 import jobStatusRoutes from './routes/job-statuses.js';
+import aiApplyRoutes from './routes/aiApplyRoutes.js';
 // import pdfRoutes from './routes/pdfRoutes.js';
 
 const app = express();
@@ -101,6 +102,10 @@ console.log('[DEBUG] Document management routes registered');
 // Job Statuses API Routes
 app.use('/api/job-statuses', jobStatusRoutes);
 console.log('[DEBUG] Job status routes registered');
+
+// AI Apply API Routes
+app.use('/api/ai-apply', aiApplyRoutes);
+console.log('[DEBUG] AI Apply routes registered');
 
 // PDF Processing Routes
 // app.use('/api/pdf', pdfRoutes);
