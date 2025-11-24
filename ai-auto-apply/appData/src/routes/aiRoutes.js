@@ -1,7 +1,7 @@
 import express from "express";
 import axios from "axios";
 import fs from "fs";
-import { parseResume } from "../services/pdfParserService.js";
+// import { parseResume } from "../services/pdfParserService.js";
 import dotenv from "dotenv";
 import { pool } from '../db.js';
 

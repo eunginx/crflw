@@ -4,7 +4,6 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { pool } from '../db.js';
-import { parseResume } from '../services/pdfParserService.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -322,22 +321,35 @@ async function processDocument(req, res) {
   const { documentId } = req.params;
   const processingOptions = req.body;
 
+  console.log("🚀 [Process Document] Starting document processing");
+  console.log("📋 [Process Document] Document ID:", documentId);
+  console.log("⚙️ [Process Document] Processing options:", processingOptions);
+
   try {
     // Get document info with user details
+    console.log("🔍 [Process Document] Fetching document from database...");
     const documentResult = await pool.query(
       'SELECT d.*, d.user_id FROM documents d WHERE d.id = $1',
       [documentId]
     );
 
     if (documentResult.rows.length === 0) {
+      console.error("❌ [Process Document] Document not found in database");
       return res.status(404).json({
         error: 'Document not found'
       });
     }
 
     const document = documentResult.rows[0];
+    console.log("✅ [Process Document] Document found:", {
+      id: document.id,
+      filename: document.filename,
+      originalName: document.original_filename,
+      userId: document.user_id
+    });
 
     if (!document.user_id) {
+      console.error("❌ [Process Document] Document not associated with a user");
       return res.status(400).json({
         error: 'Document not associated with a user'
       });
@@ -351,28 +363,28 @@ async function processDocument(req, res) {
       actualFilePath = path.join(process.cwd(), 'appData', document.file_path);
     }
     
-    console.log("Document ID:", documentId);
-    console.log("Original file path from DB:", document.file_path);
-    console.log("Resolved file path:", actualFilePath);
+    console.log("📁 [Process Document] Path resolution:");
+    console.log("   Original DB path:", document.file_path);
+    console.log("   Resolved absolute path:", actualFilePath);
     
     // Check if file exists
     try {
       await fsPromises.access(actualFilePath);
-      console.log("✅ File exists and is accessible");
+      console.log("✅ [Process Document] File exists and is accessible");
     } catch (fileError) {
-      console.error("❌ File access error:", fileError);
-      console.error("❌ Attempted path:", actualFilePath);
+      console.error("❌ [Process Document] File access error:", fileError);
+      console.error("❌ [Process Document] Attempted path:", actualFilePath);
       
       // Try alternative path resolution
       const alternativePath = path.join(__dirname, '../../uploads/documents', path.basename(document.file_path));
-      console.log("🔄 Trying alternative path:", alternativePath);
+      console.log("🔄 [Process Document] Trying alternative path:", alternativePath);
       
       try {
         await fsPromises.access(alternativePath);
-        console.log("✅ File found at alternative path");
+        console.log("✅ [Process Document] File found at alternative path");
         actualFilePath = alternativePath;
       } catch (altError) {
-        console.error("❌ Alternative path also failed");
+        console.error("❌ [Process Document] Alternative path also failed");
         return res.status(404).json({
           error: 'Document file not found on disk',
           details: fileError.message,
@@ -383,54 +395,25 @@ async function processDocument(req, res) {
       }
     }
     
-    // Read the PDF file using resolved path
-    const dataBuffer = fs.readFileSync(actualFilePath);
-    console.log("Uploaded file size:", dataBuffer.length);
+    // Use our new PDF parser service
+    console.log("📖 [Process Document] Starting PDF parsing with new service...");
+    const { parsePDF } = await import('../services/pdfParser.js');
     
-    if (dataBuffer.length === 0) {
-      return res.status(400).json({
-        error: 'PDF file is empty'
-      });
-    }
+    const pdfResult = await parsePDF(actualFilePath);
+    console.log("✅ [Process Document] PDF parsing completed successfully");
+    console.log("📊 [Process Document] Parsing results:", {
+      pages: pdfResult.num_pages,
+      textLength: pdfResult.text_length,
+      hasTitle: !!pdfResult.pdf_title,
+      hasAuthor: !!pdfResult.pdf_author
+    });
     
-    // Import and use the corrected PDFParse class
-    const { parseResume } = await import('../services/pdfParserService.js');
-    
-    // Parse the PDF using the corrected v2.4.5 API
-    const pdfResult = await parseResume(actualFilePath);
-    console.log("PDF parsing completed, text length:", pdfResult.text?.length || 0);
-    console.log("📸 Screenshot generated:", !!pdfResult.previewImageBase64);
-    
-    // Save screenshot to file if available
+    // Skip screenshot generation for now (our new parser doesn't support it yet)
     let screenshotPath = null;
-    if (pdfResult.previewImageBase64) {
-      try {
-        // Create screenshots directory if it doesn't exist
-        const screenshotsDir = path.join(__dirname, '../../uploads/screenshots');
-        await fsPromises.mkdir(screenshotsDir, { recursive: true });
-        
-        // Generate unique filename
-        const screenshotFilename = `screenshot-${documentId}-${Date.now()}.png`;
-        screenshotPath = path.join(screenshotsDir, screenshotFilename);
-        
-        // Convert base64 to buffer and save
-        let base64Data = pdfResult.previewImageBase64;
-        if (typeof base64Data === 'string') {
-          base64Data = base64Data.replace(/^data:image\/png;base64,/, '');
-        }
-        const imageBuffer = Buffer.from(base64Data, 'base64');
-        await fsPromises.writeFile(screenshotPath, imageBuffer);
-        
-        // Store relative path for frontend access
-        screenshotPath = `/uploads/screenshots/${screenshotFilename}`;
-        console.log("✅ Screenshot saved to:", screenshotPath);
-      } catch (screenshotError) {
-        console.error("❌ Failed to save screenshot:", screenshotError);
-        screenshotPath = null;
-      }
-    }
+    console.log("⚠️ [Process Document] Screenshot generation skipped (not implemented in v1.x parser)");
     
     // Store processing results in database
+    console.log("💾 [Process Document] Updating document status in database...");
     await pool.query(
       `UPDATE documents 
        SET processing_status = 'completed', 
@@ -438,29 +421,33 @@ async function processDocument(req, res) {
        WHERE id = $1`,
       [documentId]
     );
+    console.log("✅ [Process Document] Document status updated to 'completed'");
     
-    // Extract PDF metadata from info object
-    const pdfInfo = pdfResult.info || {};
-    const pdfTitle = pdfInfo.Title || null;
-    const pdfAuthor = pdfInfo.Author || null;
-    const pdfCreator = pdfInfo.Creator || null;
-    const pdfProducer = pdfInfo.Producer || null;
+    // Extract PDF metadata from our new parser structure
+    const pdfTitle = pdfResult.pdf_title || null;
+    const pdfAuthor = pdfResult.pdf_author || null;
+    const pdfCreator = pdfResult.pdf_creator || null;
+    const pdfProducer = pdfResult.pdf_producer || null;
     
-    console.log('📋 PDF Metadata extracted:', {
+    console.log('📋 [Process Document] PDF Metadata extracted:', {
       title: pdfTitle,
       author: pdfAuthor,
       creator: pdfCreator,
-      producer: pdfProducer,
-      totalInfo: Object.keys(pdfInfo)
+      producer: pdfProducer
     });
 
     // Store detailed processing results
+    console.log("💾 [Process Document] Storing processing results in database...");
     const existingResult = await pool.query(
       'SELECT id FROM document_processing_results WHERE document_id = $1',
       [documentId]
     );
     
+    // Calculate word count
+    const wordCount = pdfResult.text?.split(/\s+/).filter(word => word.length > 0).length || 0;
+    
     if (existingResult.rows.length > 0) {
+      console.log("🔄 [Process Document] Updating existing processing results...");
       // Update existing record
       await pool.query(
         `UPDATE document_processing_results 
@@ -470,9 +457,9 @@ async function processDocument(req, res) {
          WHERE document_id = $10`,
         [
           pdfResult.text || '',
-          pdfResult.text?.length || 0,
-          pdfResult.text?.split(/\s+/).filter(word => word.length > 0).length || 0,
-          pdfResult.numPages || 0,
+          pdfResult.text_length || 0,
+          wordCount,
+          pdfResult.num_pages || 0,
           pdfTitle,
           pdfAuthor,
           pdfCreator,
@@ -482,6 +469,7 @@ async function processDocument(req, res) {
         ]
       );
     } else {
+      console.log("➕ [Process Document] Inserting new processing results...");
       // Insert new record
       await pool.query(
         `INSERT INTO document_processing_results (
@@ -501,9 +489,9 @@ async function processDocument(req, res) {
         [
           documentId,
           pdfResult.text || '',
-          pdfResult.text?.length || 0,
-          pdfResult.text?.split(/\s+/).filter(word => word.length > 0).length || 0,
-          pdfResult.numPages || 0,
+          pdfResult.text_length || 0,
+          wordCount,
+          pdfResult.num_pages || 0,
           pdfTitle,
           pdfAuthor,
           pdfCreator,
@@ -512,6 +500,7 @@ async function processDocument(req, res) {
         ]
       );
     }
+    console.log("✅ [Process Document] Processing results stored successfully");
 
     // Perform AI analysis if text was extracted
     if (pdfResult.text && pdfResult.text.length > 100) {
@@ -583,17 +572,31 @@ async function processDocument(req, res) {
       data: {
         message: "Resume processed successfully",
         extractedText: pdfResult.text || '',
-        textLength: pdfResult.text?.length || 0,
-        numPages: pdfResult.numPages || 0,
-        info: pdfResult.info || {},
-        pdfTotalPages: pdfResult.numPages || 0,
-        pdfTitle: pdfTitle,
-        pdfAuthor: pdfAuthor,
-        pdfCreator: pdfCreator,
-        pdfProducer: pdfProducer,
-        screenshotPath: screenshotPath
+        textLength: pdfResult.text_length || 0,
+        numPages: pdfResult.num_pages || 0,
+        info: {
+          Title: pdfResult.pdf_title,
+          Author: pdfResult.pdf_author,
+          Creator: pdfResult.pdf_creator,
+          Producer: pdfResult.pdf_producer
+        },
+        pdfTotalPages: pdfResult.num_pages || 0,
+        pdfTitle: pdfResult.pdf_title,
+        pdfAuthor: pdfResult.pdf_author,
+        pdfCreator: pdfResult.pdf_creator,
+        pdfProducer: pdfResult.pdf_producer,
+        screenshotPath: screenshotPath,
+        processedAt: pdfResult.processed_at
       }
     };
+
+    console.log("🎉 [Process Document] Document processing completed successfully!");
+    console.log("📤 [Process Document] Sending response to frontend:", {
+      success: true,
+      pages: result.data.numPages,
+      textLength: result.data.textLength,
+      hasScreenshot: !!result.data.screenshotPath
+    });
 
     res.json({
       success: true,
@@ -602,7 +605,12 @@ async function processDocument(req, res) {
     });
 
   } catch (error) {
-    console.error('Error processing resume:', error);
+    console.error('❌ [Process Document] Error processing resume:', error);
+    console.error('🔍 [Process Document] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      documentId: req.params.documentId
+    });
     res.status(500).json({
       error: 'Failed to process resume',
       details: error.message
@@ -860,11 +868,13 @@ async function processQueue() {
         const processingOptions = queueItem.processing_options || {};
         console.log('🔍 Processing document:', queueItem.document_id, 'file_path:', document.file_path);
         
+        // Use dynamic import to avoid DOMMatrix error during startup
+        const { parseResume } = await import('../services/pdfParserService.js');
         const results = await parseResume(document.file_path);
         
         console.log('🔍 PDF processing results:', {
           textLength: results.text?.length || 0,
-          numPages: results.numPages || 0,
+          numPages: results.numpages || 0,
           hasScreenshot: !!results.previewImageBase64
         });
 
@@ -873,23 +883,13 @@ async function processQueue() {
         try {
           await client.query(
             `INSERT INTO document_processing_results 
-             (document_id, extracted_text, text_length, num_pages, pdf_title, pdf_author, pdf_creator, pdf_producer, screenshot_path, processed_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-             ON CONFLICT (document_id) DO UPDATE SET
-             extracted_text = EXCLUDED.extracted_text,
-             text_length = EXCLUDED.text_length,
-             num_pages = EXCLUDED.num_pages,
-             pdf_title = EXCLUDED.pdf_title,
-             pdf_author = EXCLUDED.pdf_author,
-             pdf_creator = EXCLUDED.pdf_creator,
-             pdf_producer = EXCLUDED.pdf_producer,
-             screenshot_path = EXCLUDED.screenshot_path,
-             processed_at = CURRENT_TIMESTAMP`,
+             (document_id, extracted_text, text_length, pdf_total_pages, pdf_title, pdf_author, pdf_creator, pdf_producer, screenshot_path, processed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
             [
               queueItem.document_id,
               results.text || '',
               results.text?.length || 0,
-              results.numPages || 0,
+              results.numpages || 0,
               results.info?.Title || '',
               results.info?.Author || '',
               results.info?.Creator || '',

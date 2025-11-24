@@ -1,5 +1,5 @@
-// Use pdf-parse v2.2.2 with named export
-import { pdf } from 'pdf-parse';
+// Use pdf-parse v2.x with default import (Node 20 compatible)
+import pdfParse from 'pdf-parse';
 
 export interface ResumeData {
   id: string;
@@ -28,12 +28,12 @@ export interface ProcessedResume {
 
 export class PDFParserService {
   /**
-   * Extract text from a PDF buffer using pdf-parse v1
+   * Extract text from a PDF buffer using pdf-parse v2.x
    */
   static async extractText(buffer: Uint8Array): Promise<string> {
     try {
-      console.log('Extracting text from PDF using v1 API...');
-      const result = await pdf(buffer);
+      console.log('Extracting text from PDF using v2.x API...');
+      const result = await pdfParse(buffer);
       console.log('Text extracted:', result.text?.length || 0, 'characters');
       return result.text || '';
     } catch (error) {
@@ -61,20 +61,17 @@ export class PDFParserService {
     producer?: string;
   }> {
     try {
-      console.log('Extracting PDF metadata using v1 API...');
+      console.log('Extracting PDF metadata using v2.x API...');
       
-      const result = await pdf(buffer);
+      const result = await pdfParse(buffer);
       
-      // v1 API has limited metadata - estimate pages from text
-      const words = result.text.trim().split(/\s+/).filter((word: string) => word.length > 0);
-      const estimatedPages = Math.ceil(words.length / 500);
-      
+      // v2.x API provides better metadata
       const metadata = {
-        totalPages: estimatedPages,
-        title: undefined, // Not available in v1
-        author: undefined, // Not available in v1
-        creator: undefined, // Not available in v1
-        producer: undefined // Not available in v1
+        totalPages: result.numpages || 0,
+        title: result.info?.Title,
+        author: result.info?.Author,
+        creator: result.info?.Creator,
+        producer: result.info?.Producer
       };
       
       console.log('Metadata extracted:', metadata);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { aiApplyService, ResumeData, ResumeProcessingResults, StatusResponse, ResumeUploadResponse } from '../services/aiApplyService';
 import { ResumeDocument } from '../types/resume';
 
@@ -84,47 +84,35 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
   // Load all resumes for the user
   const loadResumes = useCallback(async () => {
-    console.log('🔍 loadResumes called:', { userId, loadingRef: loadingRef.current });
     if (!userId || loadingRef.current) {
-      console.log('🔍 loadResumes early return:', { userId: !!userId, loadingRef: loadingRef.current });
       return;
     }
     
     try {
       loadingRef.current = true;
       setLoading(true);
-      console.log('🔍 loadResumes calling aiApplyService.getUserResumes...');
       
       const response = await aiApplyService.getUserResumes(userId);
-      console.log('🔍 loadResumes API response:', response);
       
-      // Convert ResumeData to ResumeDocument
-      const convertedResumes = response.data.map(resume => 
-        convertToResumeDocument(resume, userId)
-      );
-      console.log('🔍 loadResumes converted resumes:', convertedResumes);
+      // Convert ResumeData to ResumeDocument and remove duplicates
+      const convertedResumes = response.data
+        .map(resume => convertToResumeDocument(resume, userId))
+        .filter((resume, index, self) => 
+          index === self.findIndex(r => r.id === resume.id)
+        );
       
-      console.log('🔍 loadResumes updating state...');
       setResumes(convertedResumes);
       
       // Find active resume
       const active = convertedResumes.find(resume => resume.is_active);
-      console.log('🔍 loadResumes checking for active resume:', {
-        convertedResumes,
-        is_active_values: convertedResumes.map(r => ({ id: r.id, is_active: r.is_active }))
-      });
       if (active) {
-        console.log('🔍 loadResumes found active resume:', active);
         setActiveResumeState(active);
         // Auto-load results for active resume (don't await to avoid blocking)
-        refreshResults(active.id).catch(err => {
-          console.log('Failed to load results for active resume:', err);
-        });
+        refreshResults(active.id).catch(console.error);
       } else {
-        console.log('🔍 loadResumes no active resume found');
         setActiveResumeState(null);
-        setProcessingResults(null);
       }
+      
     } catch (error) {
       console.error('Error loading resumes:', error);
       // Don't show alert for first-time users
@@ -135,7 +123,6 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       // Always clear loading state
       setLoading(false);
       loadingRef.current = false;
-      console.log('🔍 loadResumes completed');
     }
   }, [userId, resumes.length]);
 
@@ -238,6 +225,7 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
         if (response.data?.processing_status === 'completed') {
           console.log('🔍 polling completed, stopping...');
           setStatus('completed');
+          setProcessing(false); // Clear processing state
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
@@ -331,8 +319,10 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
         // Update status based on processing results
         if (response.data?.processing_status === 'completed') {
           setStatus('completed');
+          setProcessing(false); // Clear processing state
         } else if (response.data?.processing_status === 'processing') {
           setStatus('processing');
+          setProcessing(true); // Ensure processing state is set
         }
       }
     } catch (error) {
@@ -449,14 +439,10 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
   // Load resumes when userId changes
   useEffect(() => {
-    console.log('🔍 useEffect triggered for userId:', userId);
     if (userId) {
-      console.log('🔍 Calling loadResumes...');
       loadResumes();
-    } else {
-      console.log('🔍 No userId, skipping loadResumes');
     }
-  }, [userId, loadResumes]);
+  }, [userId]);
 
   return {
     // State

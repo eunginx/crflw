@@ -1,47 +1,38 @@
-import fs from 'fs';
-import path from 'path';
 import { PDFParse } from 'pdf-parse';
+import fs from 'fs';
 
 export async function parseResume(filePath) {
-  const fileBuffer = fs.readFileSync(filePath);
-
   try {
-    // Use correct v2.4.5 class-based API with data parameter
-    const parser = new PDFParse({ data: fileBuffer });
+    console.log("🔍 [PDF Parser Service] Using pdf-parse v2.x with Node 20");
     
-    // Get text and info using modern methods
+    // Read file buffer
+    const dataBuffer = fs.readFileSync(filePath);
+    console.log("📊 [PDF Parser Service] File size:", dataBuffer.length);
+    
+    // Use modern pdf-parse v2.x API
+    const parser = new PDFParse({ data: dataBuffer });
+    
+    // Get text and metadata
     const textResult = await parser.getText();
     const infoResult = await parser.getInfo({ parsePageInfo: true });
     
-    // Generate screenshot for the first page
-    let screenshotBase64 = null;
-    try {
-      console.log('📸 Generating screenshot...');
-      const screenshotResult = await parser.getScreenshot({ 
-        scale: 1.5, 
-        pages: [0] // First page only
-      });
-      
-      if (screenshotResult && screenshotResult.pages && screenshotResult.pages[0]) {
-        screenshotBase64 = screenshotResult.pages[0].data;
-        console.log('✅ Screenshot generated successfully');
-      }
-    } catch (screenshotError) {
-      console.warn('⚠️ Screenshot generation failed:', screenshotError.message);
-    }
-    
-    // Clean up parser to prevent memory leaks
+    // Clean up parser
     await parser.destroy();
-
+    
+    console.log("✅ [PDF Parser Service] PDF parsed successfully");
+    console.log(`📄 [PDF Parser Service] Pages: ${infoResult.pages?.length || 0}, Text length: ${textResult.text?.length || 0}`);
+    
+    // Convert to format expected by existing code
     return {
-      text: textResult.text || '',
-      numPages: infoResult.total || 0,
+      text: textResult.text,
       info: infoResult.info || {},
-      pages: infoResult.pages || [],
-      previewImageBase64: screenshotBase64,
+      metadata: infoResult.metadata || {},
+      numpages: infoResult.pages?.length || 0,
+      numrender: infoResult.pages?.length || 0,
+      version: infoResult.version || '2.x'
     };
   } catch (error) {
-    console.error('Error parsing PDF:', error);
+    console.error("❌ [PDF Parser Service] Error parsing PDF:", error);
     throw error;
   }
 }

@@ -23,14 +23,6 @@ const AIApplyPage: React.FC = () => {
   // Use the new AI Apply manager hook
   const aiApplyManager = useAIApplyManager(currentUser?.uid);
 
-  // Debug logging
-  console.log('🔍 AIApplyPage state:', {
-    currentUser: currentUser?.uid,
-    resumes: aiApplyManager.resumes,
-    activeResume: aiApplyManager.activeResume,
-    loading: aiApplyManager.loading
-  });
-
   // Check onboarding status
   useEffect(() => {
     if (currentUser) {

@@ -101,6 +101,17 @@ export class DocumentManagementService {
     documentType: string = 'resume',
     processingOptions?: ProcessingOptions
   ): Promise<{ documentId: string; filename: string }> {
+    console.log("🚀 [Frontend Upload] Starting document upload");
+    console.log("📋 [Frontend Upload] Upload details:", {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      userId: userId,
+      userEmail: userEmail,
+      documentType: documentType,
+      hasProcessingOptions: !!processingOptions
+    });
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('userId', userId);
@@ -110,17 +121,28 @@ export class DocumentManagementService {
       formData.append('processingOptions', JSON.stringify(processingOptions));
     }
 
+    console.log("📤 [Frontend Upload] Sending request to backend...");
     const response = await fetch(`${this.API_BASE_URL}/api/documents/upload`, {
       method: 'POST',
       body: formData,
     });
 
+    console.log("📨 [Frontend Upload] Backend response status:", response.status);
+    
     if (!response.ok) {
+      console.error("❌ [Frontend Upload] Upload failed with status:", response.status);
       const error = await response.json();
+      console.error("❌ [Frontend Upload] Error details:", error);
       throw new Error(error.error || 'Failed to upload document');
     }
 
     const result = await response.json();
+    console.log("✅ [Frontend Upload] Upload successful:", {
+      documentId: result.documentId,
+      filename: result.filename,
+      originalFilename: result.originalFilename,
+      size: result.size
+    });
     return {
       documentId: result.documentId,
       filename: result.filename
@@ -215,6 +237,14 @@ export class DocumentManagementService {
    * Process document manually
    */
   static async processDocument(documentId: string, processingOptions?: ProcessingOptions): Promise<any> {
+    console.log("🚀 [Frontend Process] Starting document processing");
+    console.log("📋 [Frontend Process] Processing details:", {
+      documentId: documentId,
+      hasProcessingOptions: !!processingOptions,
+      processingOptions: processingOptions
+    });
+
+    console.log("📤 [Frontend Process] Sending processing request to backend...");
     const response = await fetch(`${this.API_BASE_URL}/api/documents/${documentId}/process`, {
       method: 'POST',
       headers: {
@@ -223,12 +253,25 @@ export class DocumentManagementService {
       body: JSON.stringify(processingOptions || {}),
     });
 
+    console.log("📨 [Frontend Process] Backend response status:", response.status);
+
     if (!response.ok) {
+      console.error("❌ [Frontend Process] Processing failed with status:", response.status);
       const error = await response.json();
+      console.error("❌ [Frontend Process] Error details:", error);
       throw new Error(error.error || 'Failed to process document');
     }
 
     const result = await response.json();
+    console.log("✅ [Frontend Process] Processing successful:", {
+      success: result.success,
+      message: result.message,
+      hasData: !!result.data,
+      textLength: result.data?.textLength,
+      numPages: result.data?.numPages,
+      hasScreenshot: !!result.data?.screenshotPath
+    });
+    
     return result;
   }
 
