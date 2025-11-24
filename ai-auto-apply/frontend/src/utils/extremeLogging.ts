@@ -53,14 +53,21 @@ export class ExtremeLogger {
   logComponentRender(componentName: string, props?: any) {
     if (!this.isEnabled) return;
     
+    // Type-safe memory logging with fallback
+    let memoryInfo: string | { used: string; total: string } = 'N/A';
+    if (typeof performance !== 'undefined' && (performance as any).memory) {
+      const memory = (performance as any).memory;
+      memoryInfo = {
+        used: Math.round(memory.usedJSHeapSize / 1024 / 1024) + 'MB',
+        total: Math.round(memory.totalJSHeapSize / 1024 / 1024) + 'MB'
+      };
+    }
+    
     console.log('🔥 COMPONENT RENDER:', {
       timestamp: new Date().toISOString(),
       component: componentName,
       props,
-      memory: performance.memory ? {
-        used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) + 'MB',
-        total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) + 'MB'
-      } : 'N/A'
+      memory: memoryInfo
     });
   }
 
