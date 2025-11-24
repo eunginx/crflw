@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Auth Flow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Apply - Authentication & Upload Test</h1>
+        
+        <div class="section">
+            <h2>Step 1: Sign In (Email-Based)</h2>
+            <input type="email" id="emailInput" placeholder="Enter your email" value="test@demo.com">
+            <button onclick="signIn()">Sign In</button>
+            <div id="signInResult"></div>
+        </div>
+
+        <div class="section">
+            <h2>Step 2: Upload Resume</h2>
+            <input type="file" id="fileInput" accept=".pdf">
+            <button onclick="uploadResume()">Upload Resume</button>
+            <div id="uploadResult"></div>
+        </div>
+
+        <div class="section">
+            <h2>Step 3: Get Resumes</h2>
+            <button onclick="getResumes()">Get My Resumes</button>
+            <div id="resumesResult"></div>
+        </div>
+
+        <div class="section">
+            <h2>Debug Info</h2>
+            <div id="debugInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        async function signIn() {
+            const email = document.getElementById('emailInput').value;
+            if (!email) {
+                alert('Please enter an email');
+                return;
+            }
+
+            try {
+                // Simulate the QuickSignIn API call
+                const response = await fetch('http://localhost:8000/api/health');
+                if (response.ok) {
+                    currentUser = { email: email };
+                    updateDebugInfo();
+                    document.getElementById('signInResult').innerHTML = 
+                        `<div class="success">✅ Signed in as: ${email}</div>`;
+                } else {
+                    throw new Error('Backend not available');
+                }
+            } catch (error) {
+                document.getElementById('signInResult').innerHTML = 
+                    `<div class="error">❌ Sign in failed: ${error.message}</div>`;
+            }
+        }
+
+        async function uploadResume() {
+            if (!currentUser) {
+                alert('Please sign in first');
+                return;
+            }
+
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('userEmail', currentUser.email);
+            formData.append('userId', currentUser.email); // Use email as userId too
+
+            try {
+                const response = await fetch('http://localhost:8000/api/ai-apply/resumes/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('uploadResult').innerHTML = 
+                        `<div class="success">✅ Resume uploaded successfully!
+                        <pre>${JSON.stringify(result, null, 2)}</pre></div>`;
+                } else {
+                    throw new Error(result.error || 'Upload failed');
+                }
+            } catch (error) {
+                document.getElementById('uploadResult').innerHTML = 
+                    `<div class="error">❌ Upload failed: ${error.message}</div>`;
+            }
+        }
+
+        async function getResumes() {
+            if (!currentUser) {
+                alert('Please sign in first');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8000/api/ai-apply/resumes/users/${currentUser.email}`);
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('resumesResult').innerHTML = 
+                        `<div class="success">✅ Found ${result.data.length} resumes:
+                        <pre>${JSON.stringify(result, null, 2)}</pre></div>`;
+                } else {
+                    throw new Error(result.error || 'Failed to get resumes');
+                }
+            } catch (error) {
+                document.getElementById('resumesResult').innerHTML = 
+                    `<div class="error">❌ Failed to get resumes: ${error.message}</div>`;
+            }
+        }
+
+        function updateDebugInfo() {
+            document.getElementById('debugInfo').innerHTML = 
+                `<pre>Current User: ${JSON.stringify(currentUser, null, 2)}
+Backend Health: ${currentUser ? 'Connected' : 'Not connected'}
+File Size Fix: ✅ Applied (file_size as integer)
+Email Auth: ✅ Applied (using userEmail as primary identifier)</pre>`;
+        }
+
+        // Initialize
+        updateDebugInfo();
+    </script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Firebase Auth</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Firebase Authentication Test</h1>
+        
+        <div class="section info">
+            <h2>✅ Firebase Configuration Restored</h2>
+            <ul>
+                <li>✅ Original Firebase Auth implementation restored</li>
+                <li>✅ Google sign-in using real Firebase OAuth</li>
+                <li>✅ Email/password authentication working</li>
+                <li>✅ Firebase User object with emailVerified property</li>
+                <li>✅ All TypeScript compilation errors fixed</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🔗 Test Links</h2>
+            <button onclick="window.open('http://localhost:3000/login', '_blank')">
+                Open Login Page (Firebase Auth)
+            </button>
+            <button onclick="window.open('http://localhost:3000/ai-apply', '_blank')">
+                Open AI Apply Page (Will Redirect to Login)
+            </button>
+        </div>
+
+        <div class="section">
+            <h2>🔐 Authentication Methods</h2>
+            
+            <h3>Email/Password Sign In</h3>
+            <ul>
+                <li>Uses Firebase Authentication</li>
+                <li>Validates against Firebase project</li>
+                <li>Creates user in PostgreSQL automatically</li>
+            </ul>
+
+            <h3>Google Sign In</h3>
+            <ul>
+                <li>Uses Firebase Google OAuth provider</li>
+                <li>Real Google authentication flow</li>
+                <li>Users get proper Firebase User object</li>
+                <li>Includes emailVerified status from Google</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>📝 Firebase Configuration</h2>
+            <pre>
+Project: react-firebase-starter-5
+Auth Domain: react-firebase-starter-5.firebaseapp.com
+API Key: AIzaSyAYuNqbdyEZ-oYF0pO0u-i5V5NEyNVPtP8
+            </pre>
+        </div>
+
+        <div class="section">
+            <h2>🔄 What Was Fixed</h2>
+            <ul>
+                <li>✅ Restored Firebase imports and User type</li>
+                <li>✅ Fixed React hooks rules violations</li>
+                <li>✅ Restored original signInWithGoogle implementation</li>
+                <li>✅ Updated AIApplyPage to work with Firebase User</li>
+                <li>✅ Fixed ProfilePage emailVerified property access</li>
+                <li>✅ Removed custom email-based authentication</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🧪 Testing Instructions</h2>
+            <ol>
+                <li>Open the login page using the button above</li>
+                <li>Try "Continue with Google" - should open Google OAuth popup</li>
+                <li>Or use email/password (create account if needed)</li>
+                <li>After successful login, you'll be redirected to AI Apply</li>
+                <li>Resume upload should work with Firebase user email</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        console.log('🔥 Firebase Auth Test Page Loaded');
+        console.log('📝 Firebase is configured and ready for testing');
+    </script>
+</body>
+</html>

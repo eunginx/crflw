@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAIApplyManager } from '../hooks/useAIApplyManager';
 import ResumeUpload from '../components/AIApply/ResumeUpload';
@@ -15,13 +16,21 @@ import { ProcessingSkeleton, AnalysisSkeleton, ResumeListSkeleton } from '../com
 import CurrentStatus from '../components/AIApply/CurrentStatus';
 
 const AIApplyPage: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
-  // Use the new AI Apply manager hook
-  const aiApplyManager = useAIApplyManager(currentUser?.uid);
+  // Use the new AI Apply manager hook (must be called before early returns)
+  const aiApplyManager = useAIApplyManager(currentUser?.email || '');
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      navigate('/login');
+    }
+  }, [currentUser, loading, navigate]);
 
   // Check onboarding status
   useEffect(() => {
@@ -38,8 +47,25 @@ const AIApplyPage: React.FC = () => {
     }
   }, [aiApplyManager.processing, aiApplyManager.uploading]);
 
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!currentUser) {
+    return null;
+  }
+
   const handleApplyToJobs = async () => {
-    if (!currentUser || !aiApplyManager.activeResume) {
+    if (!aiApplyManager.activeResume) {
       setError('Please select an active resume first');
       return;
     }
@@ -53,7 +79,8 @@ const AIApplyPage: React.FC = () => {
       // Step 1: Get job matches
       const jobMatchesResponse = await aiApplyManager.getJobMatches(
         aiApplyManager.activeResume.id,
-        currentUser.uid
+        currentUser?.email || '',
+        {}
       );
       
       if (!jobMatchesResponse.success) {
@@ -71,7 +98,7 @@ const AIApplyPage: React.FC = () => {
           // Generate cover letter
           const coverLetterResponse = await aiApplyManager.generateCoverLetter(
             aiApplyManager.activeResume.id,
-            currentUser.uid,
+            currentUser?.email || '',
             job.id,
             job
           );
@@ -79,14 +106,14 @@ const AIApplyPage: React.FC = () => {
           // Auto-fill application data
           const autoFillResponse = await aiApplyManager.autoFillApplication(
             aiApplyManager.activeResume.id,
-            currentUser.uid,
+            currentUser?.email || '',
             job.id
           );
           
           // Submit application
           const submitResponse = await aiApplyManager.submitApplication(
             aiApplyManager.activeResume.id,
-            currentUser.uid,
+            currentUser?.email || '',
             job.id,
             autoFillResponse.data.autoFillData,
             coverLetterResponse.data.id
@@ -168,8 +195,8 @@ const AIApplyPage: React.FC = () => {
           <ResumeUpload
             uploading={aiApplyManager.uploading}
             onUpload={aiApplyManager.uploadResume}
-            userEmail={currentUser?.email || undefined}
-            disabled={!currentUser}
+            userEmail={currentUser?.email || ''}
+            disabled={false}
           />
         )}
 

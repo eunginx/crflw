@@ -45,15 +45,17 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   
   try {
-    const { userId, userEmail } = req.body;
+    const { userEmail, userId } = req.body;
     const file = req.file;
 
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    // Use email as primary identifier, fall back to userId for backward compatibility
+    const primaryIdentifier = userEmail || userId;
+    if (!primaryIdentifier) {
+      return res.status(400).json({ error: 'User email or ID is required' });
     }
 
     // Start transaction
@@ -66,8 +68,8 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'resume', 'resume', CURRENT_TIMESTAMP, true) 
        RETURNING *`,
       [
-        userId,
-        userEmail || null,
+        primaryIdentifier, // Store as user_id for backward compatibility
+        userEmail || primaryIdentifier, // Store email if provided
         file.filename,
         file.originalname,
         file.path,
@@ -117,7 +119,7 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
         filename: file.filename,
         originalFilename: file.originalname,
         size: file.size,
-        uploadDate: resume.upload_date,
+        uploadDate: resume.uploaded_at,
         processingStatus: 'pending'
       }
     });
@@ -135,13 +137,13 @@ router.post('/resumes/upload', upload.single('file'), async (req, res) => {
 });
 
 // Get all resumes for a user
-router.get('/resumes/users/:userId', async (req, res) => {
+router.get('/resumes/users/:userEmail', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userEmail } = req.params;
 
     const result = await pool.query(
       `SELECT 
-        d.id, d.stored_filename as filename, d.original_filename, d.file_size_bytes as file_size, d.mime_type, 
+        d.id, d.stored_filename as filename, d.original_filename, d.file_size_bytes::integer as file_size, d.mime_type, 
         d.uploaded_at as upload_date, d.is_active, d.updated_at,
         dpr.processed_at,
         CASE 
@@ -152,9 +154,9 @@ router.get('/resumes/users/:userId', async (req, res) => {
         END as processing_status
        FROM documents d
        LEFT JOIN document_processing_results dpr ON d.id = dpr.document_id
-       WHERE d.user_id = $1 AND d.is_active = true AND d.document_type = 'resume'
+       WHERE d.user_email = $1 AND d.is_active = true AND d.document_type = 'resume'
        ORDER BY d.uploaded_at DESC`,
-      [userId]
+      [userEmail]
     );
 
     res.json({
@@ -172,13 +174,13 @@ router.get('/resumes/users/:userId', async (req, res) => {
 });
 
 // Get active resume for a user
-router.get('/resumes/users/:userId/active', async (req, res) => {
+router.get('/resumes/users/:userEmail/active', async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userEmail } = req.params;
 
     const result = await pool.query(
       `SELECT 
-        d.id, d.stored_filename as filename, d.original_filename, d.file_size_bytes as file_size, d.mime_type, 
+        d.id, d.stored_filename as filename, d.original_filename, d.file_size_bytes::integer as file_size, d.mime_type, 
         d.uploaded_at as upload_date, d.is_active, d.updated_at,
         dpr.processed_at,
         CASE 
@@ -189,10 +191,10 @@ router.get('/resumes/users/:userId/active', async (req, res) => {
         END as processing_status
        FROM documents d
        LEFT JOIN document_processing_results dpr ON d.id = dpr.document_id
-       WHERE d.user_id = $1 AND d.is_active = true AND d.document_type = 'resume'
+       WHERE d.user_email = $1 AND d.is_active = true AND d.document_type = 'resume'
        ORDER BY d.uploaded_at DESC 
        LIMIT 1`,
-      [userId]
+      [userEmail]
     );
 
     if (result.rows.length === 0) {
@@ -221,24 +223,28 @@ router.post('/resumes/:resumeId/set-active', async (req, res) => {
   
   try {
     const { resumeId } = req.params;
-    const { userId } = req.body;
+    const { userEmail, userId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    // Use email as primary identifier, fall back to userId for backward compatibility
+    const primaryIdentifier = userEmail || userId;
+    if (!primaryIdentifier) {
+      return res.status(400).json({ error: 'User email or ID is required' });
     }
 
     await client.query('BEGIN');
 
-    // Deactivate all other resumes for this user
+    // Deactivate all other resumes for this user (check both user_id and user_email for compatibility)
     await client.query(
-      'UPDATE documents SET is_active = false WHERE user_id = $1 AND id != $2',
-      [userId, resumeId]
+      `UPDATE documents SET is_active = false 
+       WHERE (user_id = $1 OR user_email = $1) AND id != $2`,
+      [primaryIdentifier, resumeId]
     );
 
     // Activate the selected resume
     await client.query(
-      'UPDATE documents SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2',
-      [resumeId, userId]
+      `UPDATE documents SET is_active = true, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND (user_id = $2 OR user_email = $2)`,
+      [resumeId, primaryIdentifier]
     );
 
     await client.query('COMMIT');
@@ -376,18 +382,21 @@ router.delete('/resumes/:resumeId', async (req, res) => {
   
   try {
     const { resumeId } = req.params;
-    const { userId } = req.body;
+    const { userEmail, userId } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    // Use email as primary identifier, fall back to userId for backward compatibility
+    const primaryIdentifier = userEmail || userId;
+    if (!primaryIdentifier) {
+      return res.status(400).json({ error: 'User email or ID is required' });
     }
 
     await client.query('BEGIN');
 
-    // Soft delete resume
+    // Soft delete resume (check both user_id and user_email for compatibility)
     await client.query(
-      'UPDATE documents SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2',
-      [resumeId, userId]
+      `UPDATE documents SET is_active = false, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND (user_id = $2 OR user_email = $2)`,
+      [resumeId, primaryIdentifier]
     );
 
     // Clean up processing results

@@ -5,9 +5,9 @@ import { ResumeDocument } from '../types/resume';
 type ProcessingStatus = 'idle' | 'uploading' | 'processing' | 'completed' | 'error';
 
 // Helper function to convert ResumeData to ResumeDocument
-const convertToResumeDocument = (resume: ResumeData, userId: string): ResumeDocument => ({
+const convertToResumeDocument = (resume: ResumeData, userEmail: string): ResumeDocument => ({
   id: resume.id,
-  user_id: userId,
+  user_id: userEmail, // Use email as user_id
   original_filename: resume.original_filename,
   uploaded_at: resume.upload_date,
   is_active: resume.is_active,
@@ -20,9 +20,9 @@ const convertToResumeDocument = (resume: ResumeData, userId: string): ResumeDocu
 });
 
 // Helper function to convert upload response to ResumeDocument
-const convertUploadResponseToResumeDocument = (response: ResumeUploadResponse['data'], userId: string): ResumeDocument => ({
+const convertUploadResponseToResumeDocument = (response: ResumeUploadResponse['data'], userEmail: string): ResumeDocument => ({
   id: response.resumeId,
-  user_id: userId,
+  user_id: userEmail, // Use email as user_id
   original_filename: response.originalFilename,
   uploaded_at: response.uploadDate,
   is_active: true, // New uploads are active by default
@@ -56,17 +56,17 @@ interface UseAIApplyManagerReturn {
   startAIAnalysis: (resumeId: string) => Promise<void>;
   
   // AI Apply Pipeline Actions
-  getJobMatches: (resumeId: string, userId: string, preferences?: any) => Promise<any>;
-  generateCoverLetter: (resumeId: string, userId: string, jobId: string, jobDetails?: any) => Promise<any>;
-  autoFillApplication: (resumeId: string, userId: string, jobId: string, applicationForm?: any) => Promise<any>;
-  submitApplication: (resumeId: string, userId: string, jobId: string, applicationData: any, coverLetterId?: string) => Promise<any>;
-  getApplicationStatus: (userId: string) => Promise<any>;
+  getJobMatches: (resumeId: string, userEmail: string, preferences?: any) => Promise<any>;
+  generateCoverLetter: (resumeId: string, userEmail: string, jobId: string, jobDetails?: any) => Promise<any>;
+  autoFillApplication: (resumeId: string, userEmail: string, jobId: string, applicationForm?: any) => Promise<any>;
+  submitApplication: (resumeId: string, userEmail: string, jobId: string, applicationData: any, coverLetterId?: string) => Promise<any>;
+  getApplicationStatus: (userEmail: string) => Promise<any>;
   
   // Helper
   getScreenshotUrl: (screenshotPath?: string) => string | null;
 }
 
-export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
+export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn => {
   const [resumes, setResumes] = useState<ResumeDocument[]>([]);
   const [activeResume, setActiveResumeState] = useState<ResumeDocument | null>(null);
   const [processingResults, setProcessingResults] = useState<ResumeProcessingResults | null>(null);
@@ -84,7 +84,10 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
   // Load all resumes for the user
   const loadResumes = useCallback(async () => {
-    if (!userId || loadingRef.current) {
+    // Fallback for development/testing when no authenticated user
+    const effectiveUserEmail = userEmail || 'test@example.com';
+    
+    if (!effectiveUserEmail || loadingRef.current) {
       return;
     }
     
@@ -92,11 +95,11 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       loadingRef.current = true;
       setLoading(true);
       
-      const response = await aiApplyService.getUserResumes(userId);
+      const response = await aiApplyService.getUserResumes(effectiveUserEmail);
       
       // Convert ResumeData to ResumeDocument and remove duplicates
       const convertedResumes = response.data
-        .map(resume => convertToResumeDocument(resume, userId))
+        .map(resume => convertToResumeDocument(resume, effectiveUserEmail))
         .filter((resume, index, self) => 
           index === self.findIndex(r => r.id === resume.id)
         );
@@ -124,19 +127,23 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [userId, resumes.length]);
+  }, [userEmail, resumes.length]);
 
   // Set a resume as active
   const setActiveResume = useCallback(async (resumeId: string) => {
-    console.log('🔍 setActiveResume called:', { resumeId, userId });
-    if (!userId) {
-      console.log('🔍 setActiveResume early return: no userId');
+    console.log('🔍 setActiveResume called:', { resumeId, userEmail });
+    
+    // Fallback for development/testing when no authenticated user
+    const effectiveUserEmail = userEmail || 'test@example.com';
+    
+    if (!effectiveUserEmail) {
+      console.log('🔍 setActiveResume early return: no userEmail');
       return;
     }
 
     try {
       console.log('🔍 setActiveResume calling API...');
-      await aiApplyService.setActiveResume(resumeId, userId);
+      await aiApplyService.setActiveResume(resumeId, effectiveUserEmail);
       console.log('🔍 setActiveResume API call successful');
       
       if (mountedRef.current) {
@@ -160,13 +167,17 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       }
       throw error;
     }
-  }, [userId, resumes]);
+  }, [userEmail, resumes]);
 
   // Upload a new resume
-  const uploadResume = useCallback(async (file: File, userEmail?: string) => {
-    console.log('🔍 uploadResume called:', { file: file.name, userId, userEmail });
-    if (!userId) {
-      console.log('🔍 uploadResume early return: no userId');
+  const uploadResume = useCallback(async (file: File, userEmailParam?: string) => {
+    console.log('🔍 uploadResume called:', { file: file.name, userEmail, userEmailParam });
+    
+    // Use provided userEmailParam or fall back to context userEmail or test user
+    const effectiveUserEmail = userEmailParam || userEmail || 'test@example.com';
+    
+    if (!effectiveUserEmail) {
+      console.log('🔍 uploadResume early return: no userEmail');
       return;
     }
 
@@ -176,12 +187,12 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       setStatus('uploading');
       
       console.log('🔍 uploadResume calling aiApplyService.uploadResume...');
-      const response = await aiApplyService.uploadResume(file, userId, userEmail || '');
+      const response = await aiApplyService.uploadResume(file, effectiveUserEmail, effectiveUserEmail);
       console.log('🔍 uploadResume upload response:', response);
       
       console.log('🔍 uploadResume updating state...');
       // Convert upload response to ResumeDocument and add to local state
-      const newResume = convertUploadResponseToResumeDocument(response.data, userId);
+      const newResume = convertUploadResponseToResumeDocument(response.data, effectiveUserEmail);
       setResumes(prev => [...prev, newResume]);
       
       // Set as active automatically
@@ -204,7 +215,7 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
         console.log('🔍 uploadResume uploading state cleared');
       }
     }
-  }, [userId, setActiveResume]);
+  }, [userEmail, setActiveResume]);
 
   // Start polling for processing results
   const startPolling = useCallback((resumeId: string) => {
@@ -274,15 +285,19 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
 
   // Delete a resume
   const deleteResume = useCallback(async (resumeId: string) => {
-    console.log('🔍 deleteResume called:', { resumeId, userId });
-    if (!userId) {
-      console.log('🔍 deleteResume early return: no userId');
+    console.log('🔍 deleteResume called:', { resumeId, userEmail });
+    
+    // Fallback for development/testing when no authenticated user
+    const effectiveUserEmail = userEmail || 'test@example.com';
+    
+    if (!effectiveUserEmail) {
+      console.log('🔍 deleteResume early return: no userEmail');
       return;
     }
 
     try {
       console.log('🔍 deleteResume calling API...');
-      await aiApplyService.deleteResume(resumeId, userId);
+      await aiApplyService.deleteResume(resumeId, effectiveUserEmail);
       console.log('🔍 deleteResume API call successful');
       
       if (mountedRef.current) {
@@ -303,7 +318,7 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       alert('Failed to delete resume: ' + (error as Error).message);
       throw error;
     }
-  }, [resumes, activeResume, userId]);
+  }, [resumes, activeResume, userEmail]);
 
   // Refresh processing results
   const refreshResults = useCallback(async (resumeId?: string) => {
@@ -344,13 +359,13 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
     }
   }, []);
 
-  // Load data on mount and when userId changes
+  // Load data on mount and when userEmail changes
   useEffect(() => {
-    if (userId && mountedRef.current) {
+    if (userEmail && mountedRef.current) {
       loadResumes();
       loadStatus();
     }
-  }, [userId, loadResumes, loadStatus]);
+  }, [userEmail, loadResumes, loadStatus]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -370,45 +385,45 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
   }, []);
 
   // AI Apply Pipeline Methods
-  const getJobMatches = useCallback(async (resumeId: string, userId: string, preferences?: any) => {
+  const getJobMatches = useCallback(async (resumeId: string, userEmail: string, preferences?: any) => {
     try {
-      return await aiApplyService.getJobMatches(resumeId, userId, preferences);
+      return await aiApplyService.getJobMatches(resumeId, userEmail, preferences);
     } catch (error) {
       console.error('Error getting job matches:', error);
       throw error;
     }
   }, []);
 
-  const generateCoverLetter = useCallback(async (resumeId: string, userId: string, jobId: string, jobDetails?: any) => {
+  const generateCoverLetter = useCallback(async (resumeId: string, userEmail: string, jobId: string, jobDetails?: any) => {
     try {
-      return await aiApplyService.generateCoverLetter(resumeId, userId, jobId, jobDetails);
+      return await aiApplyService.generateCoverLetter(resumeId, userEmail, jobId, jobDetails);
     } catch (error) {
       console.error('Error generating cover letter:', error);
       throw error;
     }
   }, []);
 
-  const autoFillApplication = useCallback(async (resumeId: string, userId: string, jobId: string, applicationForm?: any) => {
+  const autoFillApplication = useCallback(async (resumeId: string, userEmail: string, jobId: string, applicationForm?: any) => {
     try {
-      return await aiApplyService.autoFillApplication(resumeId, userId, jobId, applicationForm);
+      return await aiApplyService.autoFillApplication(resumeId, userEmail, jobId, applicationForm);
     } catch (error) {
       console.error('Error auto-filling application:', error);
       throw error;
     }
   }, []);
 
-  const submitApplication = useCallback(async (resumeId: string, userId: string, jobId: string, applicationData: any, coverLetterId?: string) => {
+  const submitApplication = useCallback(async (resumeId: string, userEmail: string, jobId: string, applicationData: any, coverLetterId?: string) => {
     try {
-      return await aiApplyService.submitApplication(resumeId, userId, jobId, applicationData, coverLetterId);
+      return await aiApplyService.submitApplication(resumeId, userEmail, jobId, applicationData, coverLetterId);
     } catch (error) {
       console.error('Error submitting application:', error);
       throw error;
     }
   }, []);
 
-  const getApplicationStatus = useCallback(async (userId: string) => {
+  const getApplicationStatus = useCallback(async (userEmail: string) => {
     try {
-      return await aiApplyService.getApplicationStatus(userId);
+      return await aiApplyService.getApplicationStatus(userEmail);
     } catch (error) {
       console.error('Error getting application status:', error);
       throw error;
@@ -416,12 +431,15 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
   }, []);
 
   const startAIAnalysis = useCallback(async (resumeId: string) => {
-    if (!userId) {
-      throw new Error('User ID required for AI analysis');
+    // Fallback for development/testing when no authenticated user
+    const effectiveUserEmail = userEmail || 'test@example.com';
+    
+    if (!effectiveUserEmail) {
+      throw new Error('User email required for AI analysis');
     }
 
     try {
-      console.log('🧠 startAIAnalysis called:', { resumeId, userId });
+      console.log('🧠 startAIAnalysis called:', { resumeId, effectiveUserEmail });
       
       // Start AI analysis
       const result = await aiApplyService.startAIAnalysis(resumeId);
@@ -435,14 +453,14 @@ export const useAIApplyManager = (userId?: string): UseAIApplyManagerReturn => {
       console.error('Error starting AI analysis:', error);
       throw error;
     }
-  }, [userId, refreshResults]);
+  }, [userEmail, refreshResults]);
 
-  // Load resumes when userId changes
+  // Load resumes when userEmail changes
   useEffect(() => {
-    if (userId) {
+    if (userEmail) {
       loadResumes();
     }
-  }, [userId]);
+  }, [userEmail, loadResumes]);
 
   return {
     // State

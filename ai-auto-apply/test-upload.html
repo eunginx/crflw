@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Resume Upload</title>
+</head>
+<body>
+    <h1>Test Resume Upload</h1>
+    <input type="file" id="fileInput" accept=".pdf">
+    <button onclick="uploadFile()">Upload</button>
+    <div id="result"></div>
+
+    <script>
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('userId', 'test-user-789');
+            formData.append('userEmail', 'test3@example.com');
+
+            try {
+                const response = await fetch('http://localhost:8000/api/ai-apply/resumes/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Upload Result:</h3>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                `;
+
+                if (result.success) {
+                    // Test getting resumes
+                    const resumesResponse = await fetch(`http://localhost:8000/api/ai-apply/resumes/users/test-user-789`);
+                    const resumesResult = await resumesResponse.json();
+                    
+                    document.getElementById('result').innerHTML += `
+                        <h3>Resumes List:</h3>
+                        <pre>${JSON.stringify(resumesResult, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
