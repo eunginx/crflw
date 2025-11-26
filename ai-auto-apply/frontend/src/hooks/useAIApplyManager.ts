@@ -11,7 +11,7 @@ const convertToResumeDocument = (resume: ResumeData, userEmail: string): ResumeD
   original_filename: resume.original_filename,
   upload_date: resume.upload_date, // Changed from uploaded_at to match API
   is_active: resume.is_active,
-  processing_status: resume.processing_status as "completed" | "pending" | "error" | "processing",
+  processingStatus: resume.processingStatus as "completed" | "pending" | "error" | "processing",
   filename: resume.filename, // Use filename field
   file_size: resume.file_size,
   mime_type: resume.mime_type
@@ -24,7 +24,7 @@ const convertUploadResponseToResumeDocument = (response: ResumeUploadResponse['d
   original_filename: response.originalFilename,
   upload_date: response.uploadDate, // Changed from uploaded_at to match interface
   is_active: true, // New uploads are active by default
-  processing_status: 'pending', // New uploads start as pending
+  processingStatus: 'pending', // New uploads start as pending
   filename: response.filename,
   file_size: response.size,
   mime_type: 'application/pdf' // Default for resumes
@@ -121,11 +121,39 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
           console.log('🔍 Loaded persistent results:', persistentResults.data);
           
           if (persistentResults.data) {
+            // Process persistent results to match expected format
+            const processedResults = {
+              ...persistentResults.data,
+              // Parse screenshot_path from JSON string to array
+              screenshotPaths: persistentResults.data.screenshot_path ? 
+                JSON.parse(persistentResults.data.screenshot_path) : [],
+              // Map field names to match expected format
+              numPages: persistentResults.data.pdf_total_pages,
+              extractedText: persistentResults.data.extracted_text,
+              processedAt: persistentResults.data.processing_completed_at || persistentResults.data.processed_at,
+              // Map PDF metadata fields to match component expectations
+              title: persistentResults.data.pdf_title,
+              author: persistentResults.data.pdf_author,
+              creator: persistentResults.data.pdf_creator,
+              producer: persistentResults.data.pdf_producer,
+              // Map file information
+              filename: persistentResults.data.original_filename,
+              file_size: persistentResults.data.file_size,
+              upload_date: persistentResults.data.upload_date
+            };
+            
             // Use persistent results if available
-            setProcessingResults(persistentResults.data);
+            setProcessingResults(processedResults);
             setStatus('completed');
             setProcessing(false);
             console.log('🔍 Using persistent processing results');
+            console.log('🔍 Processed screenshot paths:', processedResults.screenshotPaths);
+            console.log('🔍 PDF metadata mapped:', {
+              title: processedResults.title,
+              author: processedResults.author,
+              creator: processedResults.creator,
+              producer: processedResults.producer
+            });
           } else {
             // No persistent results, check if we need to process
             const processingStatus = await aiApplyService.checkIfNeedsProcessing(effectiveUserEmail);
@@ -253,10 +281,9 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       throw error;
     } finally {
       console.log('🔍 uploadResume finally block');
-      if (mountedRef.current) {
-        setUploading(false);
-        console.log('🔍 uploadResume uploading state cleared');
-      }
+      // Always clear uploading state, even if component unmounted
+      setUploading(false);
+      console.log('🔍 uploadResume uploading state cleared');
     }
   }, [userEmail, setActiveResume]);
 
@@ -276,7 +303,7 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
         setProcessingResults(response.data);
         
         // Stop polling if processing is complete
-        if (response.data?.processing_status === 'completed') {
+        if (response.data?.processingStatus === 'completed') {
           console.log('🔍 polling completed, stopping...');
           setStatus('completed');
           setProcessing(false); // Clear processing state
@@ -334,7 +361,7 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
     }
   }, [activeResume?.id, startPolling]);
 
-  // Delete a resume
+  // Delete a resume - always uses hard delete
   const deleteResume = useCallback(async (resumeId: string) => {
     console.log('🔍 deleteResume called:', { resumeId, userEmail });
     
@@ -346,17 +373,22 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       return;
     }
 
-    // Confirm deletion
-    const confirmed = window.confirm('Are you sure you want to delete this resume? This action cannot be undone.');
+    // Confirm hard delete
+    const confirmMessage = '⚠️ This will permanently delete the resume file and all associated data from the system, including: Document Information, PDF Metadata, Resume Preview, and Extracted Text. This action cannot be undone. Are you sure?';
+    
+    const confirmed = window.confirm(confirmMessage);
     if (!confirmed) {
       console.log('🔍 deleteResume cancelled by user');
       return;
     }
 
     try {
-      console.log('🔍 deleteResume calling API...');
-      await aiApplyService.deleteResume(resumeId, effectiveUserEmail);
-      console.log('🔍 deleteResume API call successful');
+      console.log('🔍 deleteResume calling API with HARD DELETE...');
+      const result = await aiApplyService.deleteResume(resumeId, effectiveUserEmail); // Always hard delete
+      console.log('🔍 deleteResume API call successful:', result);
+      
+      // Clear any lingering upload state
+      setUploading(false);
       
       console.log('🔍 deleteResume updating local state...');
       console.log('🔍 deleteResume current resumes before:', resumes.length, resumes.map(r => r.id));
@@ -381,11 +413,11 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
         setActiveResumeState(null);
         setProcessingResults(null);
         setStatus('idle');
-        console.log('🔍 deleteResume cleared active resume');
+        console.log('🔍 deleteResume cleared active resume and all UI components');
       }
       
       // Show success message
-      alert('Resume deleted successfully!');
+      alert('Resume and all associated data permanently deleted from system!');
       console.log('🔍 deleteResume completed');
     } catch (error) {
       console.error('🔍 deleteResume error:', error);
@@ -401,15 +433,23 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
 
     try {
       const response = await aiApplyService.getResumeResults(targetId);
+      console.log('🖼️ useAIApplyManager DEBUG - Raw API response:', response);
       
       if (mountedRef.current) {
         setProcessingResults(response.data);
+        console.log('🖼️ useAIApplyManager DEBUG - Processing results updated:', {
+          hasData: !!response.data,
+          screenshotPaths: response.data?.screenshotPaths,
+          screenshotPathsCount: response.data?.screenshotPaths?.length,
+          numPages: response.data?.numPages,
+          extractedTextLength: response.data?.extractedText?.length
+        });
         
         // Update status based on processing results
-        if (response.data?.processing_status === 'completed') {
+        if (response.data?.processingStatus === 'completed') {
           setStatus('completed');
           setProcessing(false); // Clear processing state
-        } else if (response.data?.processing_status === 'processing') {
+        } else if (response.data?.processingStatus === 'processing') {
           setStatus('processing');
           setProcessing(true); // Ensure processing state is set
         }
@@ -445,6 +485,10 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      // Clear all states on unmount to prevent stuck indicators
+      setUploading(false);
+      setProcessing(false);
+      setLoading(false);
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;

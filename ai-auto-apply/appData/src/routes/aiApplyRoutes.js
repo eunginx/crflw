@@ -313,6 +313,10 @@ router.post('/resumes/:resumeId/process', async (req, res) => {
       tables: { format: 'json' }
     };
 
+    console.log("🚀 [AI Apply] Starting resume processing");
+    console.log("📋 [AI Apply] Resume ID:", resumeId);
+    console.log("⚙️ [AI Apply] Processing options:", processingOptions);
+
     // Get resume details and validate it's active
     const resumeResult = await pool.query(
       'SELECT * FROM documents WHERE id = $1 AND document_type = \'resume\' AND is_active = true',
@@ -320,6 +324,7 @@ router.post('/resumes/:resumeId/process', async (req, res) => {
     );
 
     if (resumeResult.rows.length === 0) {
+      console.error("❌ [AI Apply] Resume not found or not active");
       return res.status(404).json({ 
         error: 'Resume not found or not active',
         details: 'Only active resumes can be processed. Please set a resume as active first.'
@@ -327,29 +332,194 @@ router.post('/resumes/:resumeId/process', async (req, res) => {
     }
 
     const resume = resumeResult.rows[0];
+    console.log("✅ [AI Apply] Resume found:", {
+      id: resume.id,
+      filename: resume.original_filename,
+      userEmail: resume.user_email
+    });
 
-    // Add to processing queue
+    // Check if file exists using robust path resolution
+    let actualFilePath = resume.file_path;
+    
+    // If the stored path is relative, make it absolute
+    if (!path.isAbsolute(resume.file_path)) {
+      actualFilePath = path.join(process.cwd(), 'appData', resume.file_path);
+    }
+    
+    console.log("📁 [AI Apply] Path resolution:");
+    console.log("   Original DB path:", resume.file_path);
+    console.log("   Resolved absolute path:", actualFilePath);
+    
+    // Check if file exists
+    try {
+      await fs.access(actualFilePath);
+      console.log("✅ [AI Apply] File exists and is accessible");
+    } catch (fileError) {
+      console.error("❌ [AI Apply] File access error:", fileError);
+      
+      // Try alternative path resolution
+      const alternativePath = path.join(__dirname, '../../uploads/documents', path.basename(resume.file_path));
+      console.log("🔄 [AI Apply] Trying alternative path:", alternativePath);
+      
+      try {
+        await fs.access(alternativePath);
+        console.log("✅ [AI Apply] File found at alternative path");
+        actualFilePath = alternativePath;
+      } catch (altError) {
+        console.error("❌ [AI Apply] Alternative path also failed");
+        return res.status(404).json({
+          error: 'Document file not found on disk',
+          details: fileError.message,
+          originalPath: resume.file_path,
+          attemptedPath: actualFilePath,
+          alternativePath: alternativePath
+        });
+      }
+    }
+
+    // Process the PDF using pdf-parse v2.4.5
+    console.log("📖 [AI Apply] Starting PDF parsing...");
+    const { PDFParse } = await import('pdf-parse');
+    
+    // Read file buffer
+    const fileBuffer = await fs.readFile(actualFilePath);
+    console.log("📊 [AI Apply] File size:", fileBuffer.length, "bytes");
+    
+    // Create parser instance
+    const parser = new PDFParse({ data: fileBuffer });
+    
+    // Extract text
+    const textResult = await parser.getText();
+    console.log("✅ [AI Apply] Text extraction completed");
+    
+    // Get metadata
+    const infoResult = await parser.getInfo({ parsePageInfo: true });
+    console.log("✅ [AI Apply] Metadata extraction completed");
+    
+    // Generate screenshots for all pages
+    let screenshotPaths = [];
+    try {
+      console.log("🖼️ [AI Apply] Generating screenshots for all pages...");
+      const screenshotResult = await parser.getScreenshot({ scale: 1.5 });
+      
+      if (screenshotResult.pages && screenshotResult.pages.length > 0) {
+        // Create assets directory if it doesn't exist
+        const assetsDir = path.join(__dirname, '../../assets/screenshots');
+        await fs.mkdir(assetsDir, { recursive: true });
+        
+        // Generate unique filename base
+        const timestamp = Date.now();
+        const filenameBase = `resume_${path.basename(actualFilePath, '.pdf')}_${timestamp}`;
+        
+        // Save each page as a separate screenshot
+        for (let i = 0; i < screenshotResult.pages.length; i++) {
+          const screenshotBuffer = Buffer.from(screenshotResult.pages[i].data);
+          const screenshotFilename = `${filenameBase}_page_${i + 1}.png`;
+          const screenshotPath = path.join(assetsDir, screenshotFilename);
+          
+          await fs.writeFile(screenshotPath, screenshotBuffer);
+          screenshotPaths.push(screenshotPath);
+          
+          console.log(`✅ [AI Apply] Screenshot saved for page ${i + 1}:`, screenshotPath);
+        }
+        
+        console.log(`✅ [AI Apply] Generated ${screenshotPaths.length} screenshots`);
+      }
+    } catch (screenshotError) {
+      console.warn("⚠️ [AI Apply] Screenshot generation failed:", screenshotError.message);
+      // Continue without screenshots
+    }
+    
+    // Clean up parser
+    await parser.destroy();
+    
+    const extractedText = textResult.text;
+    const numPages = infoResult.pages?.length || 0;
+    const pdfInfo = infoResult.info || {};
+    
+    console.log("📊 [AI Apply] Processing results:", {
+      textLength: extractedText.length,
+      numPages: numPages,
+      hasTitle: !!pdfInfo.Title,
+      hasAuthor: !!pdfInfo.Author
+    });
+
+    // Store processing results in database
+    console.log("💾 [AI Apply] Storing processing results...");
     await pool.query(
-      `INSERT INTO document_processing_queue 
-       (document_id, queue_status, priority, processing_options, created_at) 
-       VALUES ($1, 'queued', 5, $2, CURRENT_TIMESTAMP)`,
+      `UPDATE documents 
+       SET processing_status = 'completed', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [resumeId]
+    );
+
+    // Delete any existing results and insert new ones
+    await pool.query(
+      'DELETE FROM document_processing_results WHERE document_id = $1',
+      [resumeId]
+    );
+
+    await pool.query(
+      `INSERT INTO document_processing_results 
+       (document_id, extracted_text, text_length, pdf_total_pages, pdf_title, pdf_author, pdf_creator, pdf_producer, screenshot_path, processed_at, word_count, line_count)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11)`,
       [
         resumeId,
-        JSON.stringify(processingOptions)
+        extractedText,
+        extractedText.length,
+        numPages,
+        pdfInfo.Title || null,
+        pdfInfo.Author || null,
+        pdfInfo.Creator || null,
+        pdfInfo.Producer || null,
+        JSON.stringify(screenshotPaths), // Store as JSON array of all screenshot paths
+        extractedText.split(/\s+/).filter(word => word.length > 0).length, // word count
+        extractedText.split('\n').filter(line => line.trim().length > 0).length // line count
       ]
     );
 
+    console.log("✅ [AI Apply] Processing completed successfully");
+
+    // Update persistent state for user
+    try {
+      console.log("🔄 [AI Apply] Updating persistent resume state for user:", resume.user_email);
+      await userResumeStateService.updateUserResumeState(resume.user_email, resumeId);
+      console.log("✅ [AI Apply] Persistent state updated successfully");
+    } catch (stateError) {
+      console.error("❌ [AI Apply] Error updating persistent state:", stateError);
+      // Don't fail the request, just log the error
+    }
+
     res.json({
       success: true,
-      message: 'Resume queued for processing',
-      resumeId
+      message: 'Resume processed successfully',
+      resumeId,
+      results: {
+        textLength: extractedText.length,
+        numPages,
+        processedAt: new Date().toISOString()
+      }
     });
 
   } catch (error) {
-    console.error('Error processing resume:', error);
+    console.error('❌ [AI Apply] Error processing resume:', error);
+    
+    // Update document status to failed
+    try {
+      await pool.query(
+        `UPDATE documents 
+         SET processing_status = 'failed', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [req.params.resumeId]
+      );
+    } catch (updateError) {
+      console.error('Failed to update document status:', updateError);
+    }
+    
     res.status(500).json({
       error: 'Failed to process resume',
-      details: error.message
+      details: error.message,
+      stack: error.stack
     });
   }
 });
@@ -398,6 +568,22 @@ router.get('/resumes/:resumeId/results', async (req, res) => {
 
     const results = resultsResult.rows[0];
 
+    // Transform to match frontend expectations (camelCase)
+    const transformedResults = {
+      extractedText: results.extracted_text,
+      textLength: results.text_length,
+      numPages: results.num_pages,
+      pdfTitle: results.pdf_title,
+      pdfAuthor: results.pdf_author,
+      pdfCreator: results.pdf_creator,
+      pdfProducer: results.pdf_producer,
+      screenshotPaths: results.screenshot_path ? JSON.parse(results.screenshot_path) : [], // Parse JSON array
+      processedAt: results.processed_at,
+      wordCount: results.word_count,
+      lineCount: results.line_count,
+      processingStatus: results.processing_status // Convert to camelCase for frontend
+    };
+
     // Get AI analysis if available
     const analysisResult = await pool.query(
       `SELECT 
@@ -432,7 +618,7 @@ router.get('/resumes/:resumeId/results', async (req, res) => {
     res.json({
       success: true,
       data: {
-        ...results,
+        ...transformedResults,
         analysis
       }
     });
@@ -446,7 +632,7 @@ router.get('/resumes/:resumeId/results', async (req, res) => {
   }
 });
 
-// Delete resume
+// Delete resume - always performs hard delete
 router.delete('/resumes/:resumeId', async (req, res) => {
   const client = await pool.connect();
   
@@ -454,7 +640,7 @@ router.delete('/resumes/:resumeId', async (req, res) => {
     const { resumeId } = req.params;
     const { userEmail, userId } = req.body;
 
-    console.log('🗑️ Delete request received:', { resumeId, userEmail, userId });
+    console.log('🗑️ HARD DELETE request received:', { resumeId, userEmail, userId });
 
     // Use email as primary identifier, fall back to userId for backward compatibility
     const primaryIdentifier = userEmail || userId;
@@ -478,26 +664,79 @@ router.delete('/resumes/:resumeId', async (req, res) => {
     }
 
     const resume = resumeResult.rows[0];
-    console.log('🗑️ Deleting resume:', { id: resume.id, filename: resume.original_filename });
+    console.log('🔥 HARD DELETING resume:', { id: resume.id, filename: resume.original_filename });
 
-    // Delete file from filesystem
+    // ALWAYS perform hard delete - permanently remove all files
+    console.log('🔥 HARD DELETE: Permanently removing all files and data');
+    
+    // Delete resume file from filesystem
     if (resume.file_path) {
       try {
+        // Check if file exists before trying to delete
+        await fs.access(resume.file_path);
         await fs.unlink(resume.file_path);
-        console.log('🗑️ Deleted resume file:', resume.file_path);
+        console.log('🔥 HARD DELETED resume file:', resume.file_path);
       } catch (fileError) {
-        console.warn('🗑️ Failed to delete resume file:', fileError);
-        // Continue with database cleanup even if file deletion fails
+        if (fileError.code === 'ENOENT') {
+          console.log('🔥 Resume file not found, skipping:', resume.file_path);
+        } else {
+          console.warn('🔥 Failed to hard delete resume file:', fileError);
+        }
       }
     }
 
     // Delete screenshot file if exists
     if (resume.screenshot_path) {
       try {
+        // Check if file exists before trying to delete
+        await fs.access(resume.screenshot_path);
         await fs.unlink(resume.screenshot_path);
-        console.log('🗑️ Deleted screenshot file:', resume.screenshot_path);
+        console.log('🔥 HARD DELETED screenshot file:', resume.screenshot_path);
       } catch (fileError) {
-        console.warn('🗑️ Failed to delete screenshot file:', fileError);
+        if (fileError.code === 'ENOENT') {
+          console.log('🔥 Screenshot file not found, skipping:', resume.screenshot_path);
+        } else {
+          console.warn('🔥 Failed to hard delete screenshot file:', fileError);
+        }
+      }
+    }
+
+    // Delete all associated generated files (text files, additional screenshots, etc.)
+    const possiblePaths = [
+      `/Users/kapilh/crflw/ai-auto-apply/appData/assets/texts/resume_${resume.id}_extracted.txt`,
+      `/Users/kapilh/crflw/ai-auto-apply/appData/assets/screenshots/resume_${resume.id}_page1.png`,
+      `/Users/kapilh/crflw/ai-auto-apply/appData/uploads/documents/${resume.id}_*.png`,
+      `/Users/kapilh/crflw/ai-auto-apply/appData/uploads/documents/text_${resume.id}.txt`
+    ];
+
+    for (const possiblePath of possiblePaths) {
+      if (possiblePath) {
+        try {
+          // Handle wildcard paths using fs.readdir and filtering
+          if (possiblePath.includes('*')) {
+            const dir = possiblePath.substring(0, possiblePath.lastIndexOf('/'));
+            const prefix = possiblePath.split('/').pop().replace('*', '');
+            const files = await fs.readdir(dir);
+            const matchingFiles = files.filter(file => file.startsWith(prefix));
+            
+            for (const file of matchingFiles) {
+              const fullPath = path.join(dir, file);
+              await fs.access(fullPath);
+              await fs.unlink(fullPath);
+              console.log('🔥 HARD DELETED glob-matched file:', fullPath);
+            }
+          } else {
+            await fs.access(possiblePath);
+            await fs.unlink(possiblePath);
+            console.log('🔥 HARD DELETED related file:', possiblePath);
+          }
+        } catch (fileError) {
+          if (fileError.code === 'ENOENT') {
+            console.log('🔥 Related file not found, skipping:', possiblePath);
+          } else {
+            console.warn('🔥 Failed to delete related file:', fileError);
+          }
+        }
       }
     }
 
@@ -531,7 +770,8 @@ router.delete('/resumes/:resumeId', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Resume and all associated data deleted successfully'
+      message: 'Resume and all associated data permanently deleted from system (hard delete)',
+      hardDelete: true
     });
 
   } catch (error) {

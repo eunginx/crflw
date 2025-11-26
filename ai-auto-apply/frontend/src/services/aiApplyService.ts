@@ -25,7 +25,7 @@ export interface ResumeData {
   upload_date: string; // Changed from uploaded_at to match API
   is_active: boolean;
   updated_at?: string;
-  processing_status?: string;
+  processingStatus?: string;
 }
 
 export interface ResumeListResponse {
@@ -34,19 +34,35 @@ export interface ResumeListResponse {
 }
 
 export interface ResumeProcessingResults {
-  extracted_text?: string;
-  text_length?: number;
-  num_pages?: number;
-  pdf_title?: string;
-  pdf_author?: string;
-  pdf_creator?: string;
-  pdf_producer?: string;
-  screenshot_path?: string;
-  text_file_path?: string;
-  processing_status?: string;
-  processed_at?: string;
-  word_count?: number;
-  line_count?: number;
+  message?: string;
+  extractedText?: string;
+  textLength?: number;
+  numPages?: number;
+  info?: {
+    Title?: string;
+    Author?: string;
+    Creator?: string;
+    Producer?: string;
+  };
+  pdfTotalPages?: number;
+  pdfTitle?: string;
+  pdfAuthor?: string;
+  pdfCreator?: string;
+  pdfProducer?: string;
+  // New mapped fields for persistent results
+  title?: string;
+  author?: string;
+  creator?: string;
+  producer?: string;
+  filename?: string;
+  file_size?: number;
+  upload_date?: string;
+  screenshotPaths?: string[]; // Array of screenshot paths for all pages
+  textFilePath?: string;
+  processedAt?: string;
+  processingStatus?: string;
+  wordCount?: number;
+  lineCount?: number;
   analysis?: {
     contactInfo: {
       name?: string;
@@ -245,21 +261,21 @@ class AIApplyService {
   }
 
   /**
-   * Delete a resume
+   * Delete a resume - always performs hard delete
    */
-  async deleteResume(resumeId: string, userEmail: string): Promise<{ success: boolean; message: string }> {
+  async deleteResume(resumeId: string, userEmail: string): Promise<{ success: boolean; message: string; hardDelete: boolean }> {
     try {
-      console.log('🗑️ Deleting resume:', { resumeId, userEmail });
+      console.log('🗑️ HARD DELETING resume:', { resumeId, userEmail });
       
       const response = await axios.delete(
         `${API_BASE_URL}/api/ai-apply/resumes/${resumeId}`,
-        { data: { userEmail } }
+        { data: { userEmail, hardDelete: true } } // Always hard delete
       );
       
-      console.log('🗑️ Resume delete successful:', response.data);
+      console.log('🗑️ Resume hard delete successful:', response.data);
       return response.data;
     } catch (error) {
-      console.error('🗑️ Error deleting resume:', error);
+      console.error('🗑️ Error hard deleting resume:', error);
       if (axios.isAxiosError(error)) {
         console.error('🗑️ Delete error details:', {
           status: error.response?.status,
@@ -299,11 +315,29 @@ class AIApplyService {
    * Get screenshot URL
    */
   getScreenshotUrl(screenshotPath: string): string {
-    if (!screenshotPath) return '';
+    console.log('🖼️ getScreenshotUrl DEBUG - Input:', { 
+      screenshotPath, 
+      type: typeof screenshotPath,
+      length: screenshotPath?.length,
+      apiBaseUrl: API_BASE_URL
+    });
+    
+    if (!screenshotPath) {
+      console.log('🖼️ getScreenshotUrl DEBUG - No screenshotPath provided, returning empty string');
+      return '';
+    }
     
     // Extract filename from path
     const filename = screenshotPath.split('/').pop();
-    return `${API_BASE_URL}/api/documents/screenshots/${filename}`;
+    const url = `${API_BASE_URL}/api/documents/screenshots/${filename}`;
+    
+    console.log('🖼️ getScreenshotUrl DEBUG - URL construction:', {
+      originalPath: screenshotPath,
+      extractedFilename: filename,
+      finalUrl: url
+    });
+    
+    return url;
   }
 
   /**

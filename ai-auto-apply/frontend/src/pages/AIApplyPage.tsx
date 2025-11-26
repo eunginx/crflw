@@ -12,6 +12,11 @@ import SkillsCard from '../components/AIApply/SkillsCard';
 import SectionsCard from '../components/AIApply/SectionsCard';
 import RecommendationsCard from '../components/AIApply/RecommendationsCard';
 import OnboardingBanner from '../components/AIApply/OnboardingBanner';
+import ResumeIntelligenceCard from '../components/AIApply/ResumeIntelligenceCard';
+import ResumePreview from '../components/AIApply/ResumePreview';
+import CoverLetterPreview from '../components/AIApply/CoverLetterPreview';
+import CoverLetterCard from '../components/CoverLetter/CoverLetterCard';
+import JobSelection from '../components/CoverLetter/JobSelection';
 import { ProcessingSkeleton, AnalysisSkeleton, ResumeListSkeleton } from '../components/AIApply/LoadingSkeletons';
 import CurrentStatus from '../components/AIApply/CurrentStatus';
 
@@ -25,6 +30,12 @@ const AIApplyPage: React.FC = () => {
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false); // Default to false - requires user action
   const [analysisCompleted, setAnalysisCompleted] = useState(false); // Track if analysis was done for current resume
+  const [resumeIntelligence, setResumeIntelligence] = useState<any>(null);
+  const [selectedJob, setSelectedJob] = useState<any>(null);
+  
+  // Track which resume ID the current data belongs to
+  const [dataResumeId, setDataResumeId] = useState<string | null>(null);
+  const [analysisResumeId, setAnalysisResumeId] = useState<string | null>(null); // Track analysis per resume
 
   // Use the new AI Apply manager hook (must be called before early returns)
   const aiApplyManager = useAIApplyManager(currentUser?.email || '');
@@ -59,12 +70,13 @@ const AIApplyPage: React.FC = () => {
     try {
       console.log('🧠 Starting AI analysis...');
       const analysisResults = await aiApplyManager.runAIAnalysis(
-        aiApplyManager.processingResults.extracted_text || '',
+        aiApplyManager.processingResults.extractedText || '',
         JSON.stringify(aiApplyManager.processingResults),
         [] // Resume sections would be extracted from processing results
       );
       setAiAnalysis(analysisResults);
       setAnalysisCompleted(true);
+      setAnalysisResumeId(aiApplyManager.activeResume?.id || null); // Track which resume was analyzed
       console.log('🧠 AI analysis completed:', analysisResults);
     } catch (error) {
       console.error('Error running AI analysis:', error);
@@ -74,12 +86,39 @@ const AIApplyPage: React.FC = () => {
     }
   };
 
-  // Reset analysis state when resume changes
+  // Clear analysis state when resume changes (only if different resume)
   useEffect(() => {
-    setAiAnalysis(null);
-    setAnalysisCompleted(false);
-    setIsAnalyzing(false);
-  }, [aiApplyManager.activeResume?.id]);
+    const currentResumeId = aiApplyManager.activeResume?.id || null;
+    
+    if (dataResumeId && currentResumeId && dataResumeId !== currentResumeId) {
+      // Resume changed, clear all analysis data
+      console.log('🔄 Resume changed from', dataResumeId, 'to', currentResumeId, '- clearing analysis data');
+      setAiAnalysis(null);
+      setAnalysisCompleted(false);
+      setIsAnalyzing(false);
+      setResumeIntelligence(null);
+      setSelectedJob(null);
+      setDataResumeId(currentResumeId);
+      setAnalysisResumeId(null);
+    } else if (!dataResumeId && currentResumeId) {
+      // First time setting a resume
+      setDataResumeId(currentResumeId);
+    }
+  }, [aiApplyManager.activeResume?.id, dataResumeId]);
+
+  // Clear all states when active resume is deleted (processingResults becomes null)
+  useEffect(() => {
+    if (!aiApplyManager.processingResults && dataResumeId) {
+      console.log('🗑️ Active resume deleted, clearing all states');
+      setAiAnalysis(null);
+      setAnalysisCompleted(false);
+      setIsAnalyzing(false);
+      setResumeIntelligence(null);
+      setSelectedJob(null);
+      setDataResumeId(null);
+      setAnalysisResumeId(null);
+    }
+  }, [aiApplyManager.processingResults, dataResumeId]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -213,7 +252,7 @@ const AIApplyPage: React.FC = () => {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">AI Apply</h1>
         <p className="text-lg text-gray-600">
-          Transform your resume into a powerful job application tool with AI-powered insights
+          AI-powered resume analysis and job application tools
         </p>
       </div>
 
@@ -229,19 +268,16 @@ const AIApplyPage: React.FC = () => {
         isCompleted={onboardingCompleted}
       />
 
-      {/* Current Status */}
-      <CurrentStatus />
-
       {/* Your Resume Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Your Resume</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Resume</h2>
           {aiApplyManager.activeResume && (
             <button
               onClick={() => document.getElementById('resume-upload-input')?.click()}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
             >
-              Upload New Resume
+              Upload New
             </button>
           )}
         </div>
@@ -289,7 +325,6 @@ const AIApplyPage: React.FC = () => {
       {aiApplyManager.activeResume && !aiApplyManager.processingResults && needsProcessing && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Resume Processing</h3>
-          <p className="text-gray-600 mb-4">Click "Parse PDF" to extract text and metadata from your resume.</p>
           <button
             onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id || '')}
             disabled={aiApplyManager.processing}
@@ -308,7 +343,7 @@ const AIApplyPage: React.FC = () => {
             <span className="text-2xl">✅</span>
             <div>
               <p className="font-medium">Resume Already Processed</p>
-              <p className="text-sm text-gray-600">Your resume has been parsed and is ready to use.</p>
+              <p className="text-sm text-gray-600">Ready to use</p>
             </div>
           </div>
           <button
@@ -335,41 +370,105 @@ const AIApplyPage: React.FC = () => {
               originalFilename={aiApplyManager.activeResume?.original_filename || ''}
             />
             <PDFMetadataCard
-              title={aiApplyManager.processingResults.pdf_title}
-              author={aiApplyManager.processingResults.pdf_author}
-              creator={aiApplyManager.processingResults.pdf_creator}
-              producer={aiApplyManager.processingResults.pdf_producer}
-              totalPages={aiApplyManager.processingResults.num_pages || 0}
-              processedAt={aiApplyManager.processingResults.processed_at || ''}
+              title={aiApplyManager.processingResults.title}
+              author={aiApplyManager.processingResults.author}
+              creator={aiApplyManager.processingResults.creator}
+              producer={aiApplyManager.processingResults.producer}
+              totalPages={aiApplyManager.processingResults.numPages || 0}
+              processedAt={aiApplyManager.processingResults.processedAt || ''}
             />
           </div>
 
-          {/* Extracted Text & Resume Sections Grouped */}
+          {/* Extracted Text & Resume Preview Grouped */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <ExtractedTextCard
-              text={aiApplyManager.processingResults.extracted_text}
-              textLength={aiApplyManager.processingResults.text_length}
+              text={aiApplyManager.processingResults.extractedText}
+              textLength={aiApplyManager.processingResults.textLength}
               filename={aiApplyManager.activeResume?.original_filename}
             />
-            <SectionsCard
-              sections={[
-                { type: 'summary', present: true, completeness: 85 },
-                { type: 'experience', present: true, completeness: 90 },
-                { type: 'education', present: true, completeness: 80 },
-                { type: 'skills', present: true, completeness: 75 }
-              ]}
+            <ResumePreview
+              screenshotPaths={(() => {
+                const paths = aiApplyManager.processingResults.screenshotPaths || [];
+                console.log('🖼️ AIApplyPage DEBUG - Screenshot paths calculation:', {
+                  screenshotPaths: aiApplyManager.processingResults.screenshotPaths,
+                  pathsCount: paths.length,
+                  processingResults: aiApplyManager.processingResults
+                });
+                return paths;
+              })()}
+              filename={aiApplyManager.activeResume?.original_filename}
+              totalPages={aiApplyManager.processingResults.numPages}
             />
           </div>
+
+          {/* Resume Intelligence - Show after processing is complete */}
+          {aiApplyManager.processingResults && (
+            <ResumeIntelligenceCard
+              resumeText={aiApplyManager.processingResults.extractedText || ''}
+              resumeId={aiApplyManager.activeResume?.id}
+              onIntelligenceApplied={(intelligence) => {
+                console.log('🎉 Resume intelligence applied successfully!');
+                setResumeIntelligence(intelligence);
+                // Refresh user data to show updated profile/preferences
+                // This will trigger a reload of user context
+              }}
+            />
+          )}
+
+          {/* Job Selection - Show after resume intelligence is available */}
+          {resumeIntelligence && (
+            <JobSelection
+              jobs={[
+                {
+                  id: 'job-1',
+                  title: 'Senior Frontend Developer',
+                  company: 'TechCorp India',
+                  location: 'Bengaluru, Karnataka',
+                  description: 'Looking for experienced React developer with TypeScript skills...',
+                  keywords: ['React', 'TypeScript', 'Node.js'],
+                  responsibilities: ['Develop responsive web applications', 'Collaborate with cross-functional teams'],
+                  requirements: ['5+ years experience', 'React expertise'],
+                  matchScore: 85,
+                  personalizedScore: 90,
+                  salary: '₹18L - ₹28L'
+                },
+                {
+                  id: 'job-2',
+                  title: 'Full Stack Engineer',
+                  company: 'StartupXYZ',
+                  location: 'Mumbai, Maharashtra',
+                  description: 'Seeking full stack developer with Node.js and React experience...',
+                  keywords: ['Node.js', 'React', 'MongoDB'],
+                  responsibilities: ['Build full-stack applications', 'Design system architecture'],
+                  requirements: ['Full-stack experience', 'Cloud knowledge'],
+                  matchScore: 78,
+                  personalizedScore: 82,
+                  salary: '₹15L - ₹25L'
+                }
+              ]}
+              selectedJob={selectedJob}
+              onJobSelect={setSelectedJob}
+            />
+          )}
+
+          {/* Cover Letter Generator - Show after job selection */}
+          {resumeIntelligence && selectedJob && (
+            <CoverLetterCard
+              resumeIntelligence={resumeIntelligence}
+              selectedJob={selectedJob}
+              ollamaBaseUrl="http://localhost:9000"
+            />
+          )}
 
           {/* AI Analysis Section - Only show after processing is complete */}
           {aiApplyManager.processingResults && (
             <div className="space-y-8">
               {/* Analyze Button - Only show if analysis hasn't been completed for this resume */}
-              {!analysisCompleted && (
+              {(!analysisCompleted || analysisResumeId !== aiApplyManager.activeResume?.id) && (
                 <div className="bg-white rounded-lg shadow-sm p-6 text-center">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Ready to Analyze Your Resume</h3>
                   <p className="text-gray-600 mb-6">
-                    Get AI-powered insights about your resume's aesthetic appeal, skills, and receive personalized recommendations.
+                    Get AI-powered insights about your resume
                   </p>
                   <button
                     onClick={handleAnalyzeResume}
@@ -398,8 +497,8 @@ const AIApplyPage: React.FC = () => {
                 </div>
               )}
 
-              {/* AI Analysis Results - Only show after analysis is completed */}
-              {analysisCompleted && aiAnalysis && (
+              {/* AI Analysis Results - Only show after analysis is completed for current resume */}
+              {analysisCompleted && analysisResumeId === aiApplyManager.activeResume?.id && aiAnalysis && (
                 <>
                 {/* Aesthetic Score */}
                 {aiAnalysis?.aesthetic && (
@@ -448,7 +547,7 @@ const AIApplyPage: React.FC = () => {
             {isProcessing ? 'Processing...' : 'Start AI Apply'}
           </button>
           <p className="text-sm text-gray-500 mt-2">
-            Automatically apply to jobs with AI-powered matching and customization
+            Automatically apply to jobs with AI matching
           </p>
         </div>
       )}
@@ -465,7 +564,7 @@ const AIApplyPage: React.FC = () => {
             <p>Status: {aiApplyManager.status}</p>
             <p>Uploading: {aiApplyManager.uploading ? 'Yes' : 'No'}</p>
             <p>Processing: {aiApplyManager.processing ? 'Yes' : 'No'}</p>
-            <p>Screenshot available: {aiApplyManager.processingResults?.screenshot_path ? 'Yes' : 'No'}</p>
+            <p>Screenshot available: {(aiApplyManager.processingResults?.screenshotPaths?.length ?? 0) > 0 ? 'Yes' : 'No'}</p>
             <p>Aesthetic score: N/A (using mock data)</p>
           </div>
         </div>
