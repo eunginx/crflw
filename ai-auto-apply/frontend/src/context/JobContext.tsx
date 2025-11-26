@@ -47,20 +47,28 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [error, setError] = useState<string | null>(null);
   const { currentUser } = useAuth();
   
-  // Prevent duplicate initialization
-  const hasLoadedRef = useRef(false);
   const mountedRef = useRef(true);
 
-  const loadJobs = useCallback(async () => {
-    if (!currentUser?.email || hasLoadedRef.current) {
-      if (!currentUser?.email) {
-        setJobs([]);
-        setLoading(false);
+  // Debug component lifecycle
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[JOBS][PROVIDER] JobProvider mounted');
+    }
+    return () => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][PROVIDER] JobProvider unmounted');
       }
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadJobs = useCallback(async () => {
+    if (!currentUser?.email) {
+      setJobs([]);
+      setLoading(false);
       return;
     }
     
-    hasLoadedRef.current = true;
     setLoading(true);
     setError(null);
     
@@ -87,38 +95,29 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: app.notes,
       }));
       
-      if (mountedRef.current) {
-        setJobs(jobsData);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][LOAD] Setting jobs data - count:', jobsData.length);
       }
+      setJobs(jobsData);
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('[JOBS][ERROR] Failed to load jobs:', err);
       }
-      if (mountedRef.current) {
-        setError('Failed to load job applications');
-      }
+      setError('Failed to load job applications');
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[JOBS][LOAD] Finally block - setting loading to false');
       }
+      setLoading(false);
     }
   }, [currentUser]);
 
   useEffect(() => {
-    if (mountedRef.current) {
-      loadJobs();
-    }
+    loadJobs();
   }, [currentUser, loadJobs]);
 
-  // Cleanup effect
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
   const addJob = async (job: Omit<Job, 'id'>) => {
-    if (!currentUser?.email || !mountedRef.current) return;
+    if (!currentUser?.email) return;
 
     try {
       if (process.env.NODE_ENV === 'development') {
@@ -136,23 +135,17 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('[JOBS][ADD] Job added successfully:', newApplication);
       }
       
-      // Reset loading guard to allow refresh and reload jobs
-      hasLoadedRef.current = false;
-      if (mountedRef.current) {
-        await loadJobs();
-      }
+      await loadJobs();
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('[JOBS][ERROR] Failed to add job:', err);
       }
-      if (mountedRef.current) {
-        setError('Failed to add job application');
-      }
+      setError('Failed to add job application');
     }
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
-    if (!currentUser?.email || !mountedRef.current) return;
+    if (!currentUser?.email) return;
 
     try {
       if (process.env.NODE_ENV === 'development') {
@@ -171,23 +164,17 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('[JOBS][UPDATE] Job updated successfully');
       }
       
-      // Reset loading guard to allow refresh and reload jobs
-      hasLoadedRef.current = false;
-      if (mountedRef.current) {
-        await loadJobs();
-      }
+      await loadJobs();
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('[JOBS][ERROR] Failed to update job:', err);
       }
-      if (mountedRef.current) {
-        setError('Failed to update job application');
-      }
+      setError('Failed to update job application');
     }
   };
 
   const deleteJob = async (id: string) => {
-    if (!currentUser?.email || !mountedRef.current) return;
+    if (!currentUser?.email) return;
 
     try {
       if (process.env.NODE_ENV === 'development') {
@@ -198,18 +185,12 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('[JOBS][DELETE] Job deleted successfully');
       }
       
-      // Reset loading guard to allow refresh and reload jobs
-      hasLoadedRef.current = false;
-      if (mountedRef.current) {
-        await loadJobs();
-      }
+      await loadJobs();
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('[JOBS][ERROR] Failed to delete job:', err);
       }
-      if (mountedRef.current) {
-        setError('Failed to delete job application');
-      }
+      setError('Failed to delete job application');
     }
   };
 
@@ -221,6 +202,16 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateJob,
     deleteJob,
   };
+
+  // Debug logging for provider values
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[JOBS][PROVIDER] Providing values:', { 
+      jobsCount: jobs.length, 
+      loading, 
+      error,
+      jobsSample: jobs.slice(0, 2)
+    });
+  }
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;
 };

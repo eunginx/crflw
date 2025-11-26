@@ -170,7 +170,7 @@ class JobApplicationEmail {
       GROUP BY DATE(created_at)
       ORDER BY date DESC
     `;
-    const result = await dbQuery(query);
+    const result = await dbQuery(sql);
     return result.rows;
   }
 

@@ -29,6 +29,9 @@
     "api",
     "nodejs"
   ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "author": "Careerflow",
   "license": "MIT"
 }

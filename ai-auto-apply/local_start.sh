@@ -7,14 +7,28 @@ set -e
 
 echo "🚀 Starting AI Auto Apply Local Environment..."
 
+# Load NVM if available
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  echo "📦 Loading NVM..."
+  source "$NVM_DIR/nvm.sh"
+  source "$NVM_DIR/bash_completion"
+fi
+
 # Ensure correct Node version
 REQUIRED_NODE_MAJOR=20
 NODE_MAJOR=$(node -v | sed 's/v\([0-9]*\).*/\1/')
 
 if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
   echo "❌ Node $REQUIRED_NODE_MAJOR+ is required. You are running Node $(node -v)."
-  echo "👉 Please run: nvm install 20 && nvm use 20"
-  exit 1
+  echo "🔄 Auto-switching to Node 20..."
+  nvm install 20
+  nvm use 20
+  NODE_MAJOR=$(node -v | sed 's/v\([0-9]*\).*/\1/')
+  if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
+    echo "❌ Failed to switch to Node 20. Please manually run: nvm install 20 && nvm use 20"
+    exit 1
+  fi
 fi
 
 echo "✅ Node version check passed: $(node -v)"
@@ -69,6 +83,68 @@ wait_for_service() {
     return 1
 }
 
+# Function to stream frontend logs in real-time
+stream_frontend_logs() {
+    local log_file="logs/frontend.log"
+    local timeout=${1:-60}
+    local elapsed=0
+    
+    echo -e "${BLUE}🌐 Streaming frontend logs in real-time...${NC}"
+    echo -e "${YELLOW}  📝 Watching: $log_file${NC}"
+    echo ""
+    
+    # Wait for log file to exist
+    while [ ! -f "$log_file" ] && [ $elapsed -lt $timeout ]; do
+        echo -e "${YELLOW}  ⏳ Waiting for log file to appear... ($elapsed/$timeout)${NC}"
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    if [ ! -f "$log_file" ]; then
+        echo -e "${RED}  ❌ Log file never appeared${NC}"
+        return 1
+    fi
+    
+    # Stream logs until compilation completes or timeout
+    echo -e "${BLUE}  📄 Live frontend compilation logs:${NC}"
+    echo ""
+    
+    # Use tail -f to follow the log file
+    tail -f "$log_file" &
+    local tail_pid=$!
+    
+    # Monitor for completion
+    local compilation_complete=false
+    local compilation_failed=false
+    
+    while [ $elapsed -lt $timeout ] && [ "$compilation_complete" = false ] && [ "$compilation_failed" = false ]; do
+        if grep -q "Compiled successfully!" "$log_file" && grep -q "webpack compiled successfully" "$log_file"; then
+            compilation_complete=true
+            echo -e "\n${GREEN}  ✅ Frontend compilation completed!${NC}"
+        elif grep -q "Failed to compile" "$log_file"; then
+            compilation_failed=true
+            echo -e "\n${RED}  ❌ Frontend compilation failed!${NC}"
+        fi
+        
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    # Stop tailing
+    kill $tail_pid 2>/dev/null || true
+    
+    if [ "$compilation_complete" = true ]; then
+        echo -e "${GREEN}  🎉 Frontend ready for use!${NC}"
+        return 0
+    elif [ "$compilation_failed" = true ]; then
+        echo -e "${RED}  💥 Frontend compilation failed${NC}"
+        return 1
+    else
+        echo -e "${YELLOW}  ⏰ Frontend compilation timeout after ${timeout}s${NC}"
+        return 1
+    fi
+}
+
 # Kill existing processes on dev ports
 echo -e "${BLUE}🧹 Cleaning up existing processes...${NC}"
 kill_port 3000  # Frontend
@@ -85,7 +161,7 @@ echo -e "${BLUE}📦 Checking dependencies...${NC}"
 echo -e "${BLUE}  🔍 Checking frontend dependencies...${NC}"
 if [ ! -d "frontend/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing frontend dependencies...${NC}"
-    cd frontend && npm install && cd ..
+    cd frontend && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
     echo -e "${GREEN}  ✅ Frontend dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ Frontend dependencies already installed${NC}"
@@ -94,7 +170,7 @@ fi
 echo -e "${BLUE}  🔍 Checking AI service dependencies...${NC}"
 if [ ! -d "ai-service/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing AI service dependencies...${NC}"
-    cd ai-service && npm install && cd ..
+    cd ai-service && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
     echo -e "${GREEN}  ✅ AI service dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ AI service dependencies already installed${NC}"
@@ -103,7 +179,7 @@ fi
 echo -e "${BLUE}  🔍 Checking appData dependencies...${NC}"
 if [ ! -d "appData/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing appData dependencies...${NC}"
-    cd appData && npm install && cd ..
+    cd appData && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
     echo -e "${GREEN}  ✅ AppData dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ AppData dependencies already installed${NC}"
@@ -123,6 +199,8 @@ echo -e "${BLUE}🔧 Starting Backend (appData) on port 8000...${NC}"
 cd appData
 echo -e "${YELLOW}  📝 Command: PORT=8000 npm run dev${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/backend.log${NC}"
+# Ensure Node 20 is used for this service
+nvm use 20 > /dev/null 2>&1
 PORT=8000 npm run dev > ../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
@@ -135,6 +213,8 @@ echo -e "${BLUE}🤖 Starting AI Service on port 9000...${NC}"
 cd ai-service
 echo -e "${YELLOW}  📝 Command: PORT=9000 npm run dev${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/ai-service.log${NC}"
+# Ensure Node 20 is used for this service
+nvm use 20 > /dev/null 2>&1
 PORT=9000 npm run dev > ../logs/ai-service.log 2>&1 &
 AI_SERVICE_PID=$!
 cd ..
@@ -145,9 +225,11 @@ echo ""
 # Start Frontend on port 3000
 echo -e "${BLUE}🌐 Starting Frontend on port 3000...${NC}"
 cd frontend
-echo -e "${YELLOW}  📝 Command: PORT=3000 npm start${NC}"
+echo -e "${YELLOW}  📝 Command: PORT=3000 npm run start:fast${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/frontend.log${NC}"
-PORT=3000 npm start > ../logs/frontend.log 2>&1 &
+# Ensure Node 20 is used for this service
+nvm use 20 > /dev/null 2>&1
+PORT=3000 npm run start:fast > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
 echo $FRONTEND_PID > logs/frontend.pid
@@ -156,8 +238,15 @@ echo ""
 
 # Wait for services to be ready
 echo -e "${BLUE}⏳ Waiting for services to initialize...${NC}"
-echo -e "${YELLOW}  💤 Giving services 5 seconds to start up...${NC}"
+echo -e "${YELLOW}  💤 Giving backend and AI service 5 seconds to start up...${NC}"
 sleep 5
+
+# Stream frontend compilation logs in real-time
+echo ""
+stream_frontend_logs 60
+FRONTEND_COMPILE_STATUS=$?
+
+echo ""
 
 # Check if services are running
 echo -e "${BLUE}🔍 Checking service status...${NC}"
@@ -189,6 +278,33 @@ echo ""
 echo -e "${BLUE}  🌐 Checking Frontend (port 3000)...${NC}"
 if check_port 3000; then
     echo -e "${GREEN}  ✅ Frontend running on http://localhost:3000${NC}"
+    
+    if [ $FRONTEND_COMPILE_STATUS -eq 0 ]; then
+        # Wait for frontend to be ready (check if it serves HTML)
+        FRONTEND_HTTP_READY=false
+        HTTP_ATTEMPTS=0
+        MAX_HTTP_ATTEMPTS=5
+        
+        while [ $HTTP_ATTEMPTS -lt $MAX_HTTP_ATTEMPTS ]; do
+            if curl -s --max-time 3 "http://localhost:3000" | grep -q "<!DOCTYPE html>"; then
+                echo -e "${GREEN}  ✅ Frontend is ready and serving content${NC}"
+                FRONTEND_HTTP_READY=true
+                break
+            else
+                echo -e "${YELLOW}  ⏳ Waiting for frontend HTTP response... ($((HTTP_ATTEMPTS + 1))/$MAX_HTTP_ATTEMPTS)${NC}"
+                sleep 2
+                HTTP_ATTEMPTS=$((HTTP_ATTEMPTS + 1))
+            fi
+        done
+        
+        if [ "$FRONTEND_HTTP_READY" = false ]; then
+            echo -e "${YELLOW}  ⚠️  Frontend compiled but not serving HTML yet${NC}"
+            echo -e "${YELLOW}  🔗 Try accessing: http://localhost:3000${NC}"
+        fi
+    else
+        echo -e "${YELLOW}  ⚠️  Frontend running but compilation may have issues${NC}"
+        echo -e "${YELLOW}  📄 Check logs/frontend.log for details${NC}"
+    fi
 else
     echo -e "${RED}  ❌ Frontend failed to start${NC}"
     echo -e "${RED}  📄 Check logs/frontend.log for details${NC}"

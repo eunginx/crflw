@@ -21,22 +21,11 @@ const JobsPage = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
-  const [isScrolled, setIsScrolled] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showClustering, setShowClustering] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const jobsPerPage = 10;
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Handle scroll detection for sticky filter bar
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Calculate job matches with AI analysis
   const jobsWithAnalysis = useMemo(() => {
@@ -97,6 +86,16 @@ const JobsPage = () => {
   const startIndex = (currentPage - 1) * jobsPerPage;
   const paginatedJobs = filteredJobs.slice(startIndex, startIndex + jobsPerPage);
 
+  // Debug logging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[JOBS][DEBUG] Raw jobs count:', jobs.length);
+    console.log('[JOBS][DEBUG] Filtered jobs count:', filteredJobs.length);
+    console.log('[JOBS][DEBUG] Paginated jobs count:', paginatedJobs.length);
+    console.log('[JOBS][DEBUG] Selected statuses:', selectedStatuses);
+    console.log('[JOBS][DEBUG] Loading:', loading);
+    console.log('[JOBS][DEBUG] Error:', error);
+  }
+
   // Get unique companies for filter dropdown
   const uniqueCompanies = useMemo(() => 
     Array.from(new Set(jobs.map(job => job.company))).sort(),
@@ -109,12 +108,9 @@ const JobsPage = () => {
     [jobs, searchFilters.query]
   );
 
-  // Reset page when filters change and scroll to top
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
   }, [selectedStatuses, companyFilter, searchFilters, sortBy, sortOrder]);
 
   // Simulate loading state for better UX
@@ -145,6 +141,15 @@ const JobsPage = () => {
       case 'offer': return '🟣';
       case 'rejected': return '🔴';
       default: return '⚪';
+    }
+  };
+
+  // Handle filter changes for compact filters
+  const handleFilterChange = (type: string, value: string) => {
+    if (type === 'status') {
+      setSelectedStatuses(value === 'all' ? ['all'] : [value]);
+    } else if (type === 'company') {
+      setCompanyFilter(value);
     }
   };
 
@@ -335,172 +340,98 @@ const JobsPage = () => {
         </div>
       )}
 
-      {/* Sticky Filter Section with Scroll Effects */}
-      <div 
-        ref={scrollRef}
-        className={`sticky top-[70px] bg-white z-30 transition-all duration-300 mb-6 rounded-2xl ${
-          isScrolled ? 'shadow-md' : 'shadow-sm'
-        }`}
-      >
-        <div className={`transition-all duration-300 p-4 ${
-          isScrolled ? 'py-3' : 'py-6'
-        }`}>
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">Filter Jobs</h3>
-          </div>
-          
-          {/* Search Bar */}
-          <div className="mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <label htmlFor="job-search" className="sr-only">Search jobs</label>
-                  <input
-                    id="job-search"
-                    name="job-search"
-                    type="text"
-                    placeholder="Search by title, company, location, or keywords..."
-                    value={searchFilters.query}
-                    onChange={(e) => setSearchFilters({ ...searchFilters, query: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  {searchFilters.query && (
-                    <button
-                      onClick={clearSearch}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                
-                {/* Search Suggestions */}
-                {searchSuggestions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {searchSuggestions.map((suggestion, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setSearchFilters({ ...searchFilters, query: suggestion })}
-                        className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
+      {/* Compact Filter Section */}
+      <div className="bg-white border-b border-gray-200 mb-6 py-3">
+        <div className="px-4">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+            {/* Search Bar */}
+            <div className="flex-1">
+              <div className="relative">
+                <label htmlFor="job-search" className="sr-only">Search jobs</label>
+                <input
+                  id="job-search"
+                  name="job-search"
+                  type="text"
+                  placeholder="Search jobs..."
+                  value={searchFilters.query}
+                  onChange={(e) => setSearchFilters({ ...searchFilters, query: e.target.value })}
+                  className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <svg className="absolute left-3 top-2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {searchFilters.query && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 )}
-              </div>
-              
-              {/* Search By Dropdown */}
-              <label htmlFor="search-by" className="sr-only">Search by field</label>
-              <select
-                id="search-by"
-                name="search-by"
-                value={searchFilters.searchBy}
-                onChange={(e) => setSearchFilters({ ...searchFilters, searchBy: e.target.value as any })}
-                className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Fields</option>
-                <option value="title">Title</option>
-                <option value="company">Company</option>
-                <option value="location">Location</option>
-                <option value="keywords">Keywords</option>
-              </select>
-            </div>
-          </div>
-          
-          {/* Multi-Select Status Filter Chips */}
-          <div className="mb-6">
-            <div className="text-sm font-medium text-gray-700 mb-3">Status Filters (Multi-select)</div>
-            <div className="flex flex-wrap gap-3">
-              {statusOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleStatusToggle(option.value)}
-                  className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border-2 transition-all duration-200 hover:shadow-md cursor-pointer ${
-                    selectedStatuses.includes(option.value)
-                      ? `${option.color} shadow-md`
-                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-                  }`}
-                >
-                  <span className="mr-2 text-sm">{getStatusIcon(option.value)}</span>
-                  {option.label}
-                  {selectedStatuses.includes(option.value) && (
-                    <span className="ml-1 text-xs">✓</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Advanced Filters and Sorting */}
-          <div className="flex flex-wrap items-center gap-4 justify-between">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="min-w-[200px]">
-                <label htmlFor="company-filter" className="block text-sm font-medium text-gray-700 mb-3">
-                  Company
-                </label>
-                <select
-                  id="company-filter"
-                  name="company-filter"
-                  value={companyFilter}
-                  onChange={(e) => setCompanyFilter(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">All Companies</option>
-                  {uniqueCompanies.map(company => (
-                    <option key={company} value={company}>{company}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="min-w-[200px]">
-                <label htmlFor="sort-by" className="block text-sm font-medium text-gray-700 mb-3">
-                  Sort By
-                </label>
-                <select
-                  id="sort-by"
-                  name="sort-by"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="date">Date</option>
-                  <option value="relevance">Relevance Score</option>
-                  <option value="title">Title</option>
-                  <option value="company">Company</option>
-                </select>
-              </div>
-              
-              <div className="min-w-[120px]">
-                <label htmlFor="sort-order" className="block text-sm font-medium text-gray-700 mb-3">
-                  Order
-                </label>
-                <select
-                  id="sort-order"
-                  name="sort-order"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as any)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="desc">Desc</option>
-                  <option value="asc">Asc</option>
-                </select>
               </div>
             </div>
             
-            <div className="flex items-end">
+            {/* Status Filter */}
+            <div className="flex-shrink-0">
+              <select
+                value={selectedStatuses.includes('all') ? 'all' : selectedStatuses[0]}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Statuses</option>
+                <option value="saved">Saved</option>
+                <option value="applied">Applied</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            
+            {/* Company Filter */}
+            <div className="flex-shrink-0">
+              <select
+                value={companyFilter}
+                onChange={(e) => handleFilterChange('company', e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All Companies</option>
+                {uniqueCompanies.map(company => (
+                  <option key={company} value={company}>{company}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Sort Options */}
+            <div className="flex-shrink-0">
+              <select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [sort, order] = e.target.value.split('-');
+                  setSortBy(sort as 'date' | 'relevance' | 'title' | 'company');
+                  setSortOrder(order as 'asc' | 'desc');
+                }}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="date-desc">Latest First</option>
+                <option value="date-asc">Oldest First</option>
+                <option value="title-asc">Title A-Z</option>
+                <option value="title-desc">Title Z-A</option>
+                <option value="company-asc">Company A-Z</option>
+                <option value="company-desc">Company Z-A</option>
+              </select>
+            </div>
+            
+            {/* Clear Filters */}
+            {(selectedStatuses.length > 0 && !selectedStatuses.includes('all')) || companyFilter || searchFilters.query ? (
               <button
                 onClick={clearAllFilters}
-                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors duration-200 font-medium text-sm"
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                Clear All Filters
+                Clear All
               </button>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>
