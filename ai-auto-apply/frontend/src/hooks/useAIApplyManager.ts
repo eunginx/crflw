@@ -121,39 +121,48 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
           console.log('🔍 Loaded persistent results:', persistentResults.data);
           
           if (persistentResults.data) {
-            // Process persistent results to match expected format
-            const processedResults = {
-              ...persistentResults.data,
-              // Parse screenshot_path from JSON string to array
-              screenshotPaths: persistentResults.data.screenshot_path ? 
-                JSON.parse(persistentResults.data.screenshot_path) : [],
-              // Map field names to match expected format
-              numPages: persistentResults.data.pdf_total_pages,
-              extractedText: persistentResults.data.extracted_text,
-              processedAt: persistentResults.data.processing_completed_at || persistentResults.data.processed_at,
-              // Map PDF metadata fields to match component expectations
-              title: persistentResults.data.pdf_title,
-              author: persistentResults.data.pdf_author,
-              creator: persistentResults.data.pdf_creator,
-              producer: persistentResults.data.pdf_producer,
-              // Map file information
-              filename: persistentResults.data.original_filename,
-              file_size: persistentResults.data.file_size,
-              upload_date: persistentResults.data.upload_date
-            };
+            // Validate that the persistent results contain meaningful data
+            const hasValidData = persistentResults.data.extracted_text && 
+                                persistentResults.data.extracted_text.trim().length > 0;
             
-            // Use persistent results if available
-            setProcessingResults(processedResults);
-            setStatus('completed');
-            setProcessing(false);
-            console.log('🔍 Using persistent processing results');
-            console.log('🔍 Processed screenshot paths:', processedResults.screenshotPaths);
-            console.log('🔍 PDF metadata mapped:', {
-              title: processedResults.title,
-              author: processedResults.author,
-              creator: processedResults.creator,
-              producer: processedResults.producer
-            });
+            if (!hasValidData) {
+              console.log('🔍 Persistent results exist but contain no valid data, treating as not processed');
+              // Don't set invalid results
+            } else {
+              // Process persistent results to match expected format
+              const processedResults = {
+                ...persistentResults.data,
+                // Parse screenshot_path from JSON string to array
+                screenshotPaths: persistentResults.data.screenshot_path ? 
+                  JSON.parse(persistentResults.data.screenshot_path) : [],
+                // Map field names to match expected format
+                numPages: persistentResults.data.pdf_total_pages,
+                extractedText: persistentResults.data.extracted_text,
+                processedAt: persistentResults.data.processing_completed_at || persistentResults.data.processed_at,
+                // Map PDF metadata fields to match component expectations
+                title: persistentResults.data.pdf_title,
+                author: persistentResults.data.pdf_author,
+                creator: persistentResults.data.pdf_creator,
+                producer: persistentResults.data.pdf_producer,
+                // Map file information
+                filename: persistentResults.data.original_filename,
+                file_size: persistentResults.data.file_size,
+                upload_date: persistentResults.data.upload_date
+              };
+              
+              // Use persistent results if available
+              setProcessingResults(processedResults);
+              setStatus('completed');
+              setProcessing(false);
+              console.log('🔍 Using persistent processing results');
+              console.log('🔍 Processed screenshot paths:', processedResults.screenshotPaths);
+              console.log('🔍 PDF metadata mapped:', {
+                title: processedResults.title,
+                author: processedResults.author,
+                creator: processedResults.creator,
+                producer: processedResults.producer
+              });
+            }
           } else {
             // No persistent results, check if we need to process
             const processingStatus = await aiApplyService.checkIfNeedsProcessing(effectiveUserEmail);
@@ -390,23 +399,12 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       // Clear any lingering upload state
       setUploading(false);
       
-      console.log('🔍 deleteResume updating local state...');
-      console.log('🔍 deleteResume current resumes before:', resumes.length, resumes.map(r => r.id));
-      
-      // Remove from local state immediately with functional update
+      // Remove from local state
       setResumes(prev => {
         const newResumes = prev.filter(resume => resume.id !== resumeId);
         console.log('🔍 deleteResume filtered resumes:', { before: prev.length, after: newResumes.length });
-        console.log('🔍 deleteResume new resumes after:', newResumes.map(r => r.id));
-        return [...newResumes]; // Ensure new array reference for re-render
+        return newResumes;
       });
-      
-      // Force a re-render by updating with a small delay
-      setTimeout(() => {
-        setResumes(prev => [...prev]); // Force re-render with same array
-      }, 100);
-      
-      console.log('🔍 deleteResume state updated, checking re-render...');
       
       // Clear active resume if it was the deleted one
       if (activeResume?.id === resumeId) {
@@ -419,12 +417,17 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       // Show success message
       alert('Resume and all associated data permanently deleted from system!');
       console.log('🔍 deleteResume completed');
+      
+      // Reload resumes to ensure sync with backend
+      await loadResumes();
+      
     } catch (error) {
       console.error('🔍 deleteResume error:', error);
       alert('Failed to delete resume: ' + (error as Error).message);
-      // Don't throw error - let the component handle the cleanup
+      // Reload resumes to ensure state consistency
+      await loadResumes();
     }
-  }, [resumes, activeResume, userEmail]);
+  }, [userEmail, loadResumes]);
 
   // Refresh processing results
   const refreshResults = useCallback(async (resumeId?: string) => {
@@ -436,22 +439,35 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       console.log('🖼️ useAIApplyManager DEBUG - Raw API response:', response);
       
       if (mountedRef.current) {
-        setProcessingResults(response.data);
-        console.log('🖼️ useAIApplyManager DEBUG - Processing results updated:', {
-          hasData: !!response.data,
-          screenshotPaths: response.data?.screenshotPaths,
-          screenshotPathsCount: response.data?.screenshotPaths?.length,
-          numPages: response.data?.numPages,
-          extractedTextLength: response.data?.extractedText?.length
-        });
+        // Validate that the results contain meaningful data
+        const hasValidData = response.data && 
+                          response.data.extractedText && 
+                          response.data.extractedText.trim().length > 0;
         
-        // Update status based on processing results
-        if (response.data?.processingStatus === 'completed') {
-          setStatus('completed');
-          setProcessing(false); // Clear processing state
-        } else if (response.data?.processingStatus === 'processing') {
-          setStatus('processing');
-          setProcessing(true); // Ensure processing state is set
+        if (hasValidData) {
+          setProcessingResults(response.data);
+          console.log('🖼️ useAIApplyManager DEBUG - Processing results updated:', {
+            hasData: !!response.data,
+            screenshotPaths: response.data?.screenshotPaths,
+            screenshotPathsCount: response.data?.screenshotPaths?.length,
+            numPages: response.data?.numPages,
+            extractedTextLength: response.data?.extractedText?.length
+          });
+          
+          // Update status based on processing results
+          if (response.data?.processingStatus === 'completed') {
+            setStatus('completed');
+            setProcessing(false); // Clear processing state
+          } else if (response.data?.processingStatus === 'processing') {
+            setStatus('processing');
+            setProcessing(true); // Ensure processing state is set
+          }
+        } else {
+          console.log('🔍 Results received but contain no valid data, not setting processing results');
+          // Clear processing results if they were previously set with invalid data
+          setProcessingResults(null);
+          setProcessing(false);
+          setStatus('idle');
         }
       }
     } catch (error) {

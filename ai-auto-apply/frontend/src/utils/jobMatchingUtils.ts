@@ -1,6 +1,6 @@
 // AI Relevance Scoring and Matching Utilities
 
-interface ResumeSkills {
+export interface ResumeSkills {
   technical: string[];
   soft: string[];
   experience: string[];
@@ -106,21 +106,24 @@ export const getSeniorityMatch = (jobTitle: string, jobDescription: string): Mat
   };
 };
 
-// Analyze job match
+// Analyze job match with real resume skills
 export const analyzeJobMatch = (job: {
   title: string;
   company: string;
   description?: string;
   location?: string;
-}): JobMatchAnalysis => {
+}, resumeSkills?: ResumeSkills): JobMatchAnalysis => {
   const reasons: MatchReason[] = [];
   let totalScore = 0;
   let maxScore = 0;
   
+  // Use provided skills or fall back to mock skills
+  const skillsToUse = resumeSkills || mockResumeSkills;
+  
   // Skills matching (40% weight)
   const jobSkills = extractSkillsFromJob(job.title, job.description || '');
   const matchingSkills = jobSkills.filter(skill => 
-    mockResumeSkills.technical.includes(skill)
+    skillsToUse.technical.includes(skill)
   );
   const skillsScore = jobSkills.length > 0 ? matchingSkills.length / jobSkills.length : 0.5;
   totalScore += skillsScore * 40;
@@ -136,7 +139,7 @@ export const analyzeJobMatch = (job: {
   }
   
   const missingSkills = jobSkills.filter(skill => 
-    !mockResumeSkills.technical.includes(skill)
+    !skillsToUse.technical.includes(skill)
   );
   if (missingSkills.length > 0) {
     reasons.push({

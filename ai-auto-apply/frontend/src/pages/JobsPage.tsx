@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useJobs } from '../context/JobContext';
+import { useUser } from '../context/UserContext';
+import { useResumeIntelligence } from '../hooks/useResumeIntelligence';
 import { analyzeJobMatch, getScoreColor, getScoreIcon } from '../utils/jobMatchingUtils';
 import { SearchFilters, filterJobsBySearch, getSearchSuggestions } from '../utils/searchUtils';
+import PersonalizedJobService from '../services/personalizedJobService';
+import ResumeIntelligenceService from '../services/resumeIntelligenceService';
 import MatchReasonsPopover from '../components/MatchReasonsPopover';
+import PersonalizedJobCard from '../components/Jobs/PersonalizedJobCard';
 import JobCardSkeleton from '../components/JobCardSkeleton';
 import EmptyState from '../components/EmptyState';
 import AnalyticsWidget from '../components/AnalyticsWidget';
@@ -11,33 +16,54 @@ import AutoSuggestFilters from '../components/AutoSuggestFilters';
 
 const JobsPage = () => {
   const { jobs, loading, error, updateJob } = useJobs();
+  const { profile, preferences } = useUser();
+  const { resumeSkills, resumeAnalysis, loading: resumeLoading, hasResume } = useResumeIntelligence();
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['all']);
   const [companyFilter, setCompanyFilter] = useState<string>('');
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     query: '',
     searchBy: 'all'
   });
-  const [sortBy, setSortBy] = useState<'date' | 'relevance' | 'title' | 'company'>('date');
+  const [sortBy, setSortBy] = useState<'date' | 'relevance' | 'title' | 'company' | 'personalized'>('personalized');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showClustering, setShowClustering] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [showPersonalization, setShowPersonalization] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const jobsPerPage = 10;
 
-  // Calculate job matches with AI analysis
+  // Get user data for personalization
+  const user = useMemo(() => ({ profile, preferences }), [profile, preferences]);
+
+  // Calculate job matches with real resume intelligence
   const jobsWithAnalysis = useMemo(() => {
+    if (!hasResume || !resumeSkills) {
+      // Fall back to basic analysis if no resume
+      return jobs.map(job => ({
+        ...job,
+        analysis: analyzeJobMatch(job)
+      }));
+    }
+    
     return jobs.map(job => ({
       ...job,
-      analysis: analyzeJobMatch(job)
+      analysis: analyzeJobMatch(job, resumeSkills),
+      resumeAnalysis: resumeAnalysis ? ResumeIntelligenceService.analyzeJobMatchWithResume(job, resumeAnalysis) : null,
+      coverLetterHighlights: resumeAnalysis ? ResumeIntelligenceService.generateCoverLetterHighlights(job, resumeAnalysis) : []
     }));
-  }, [jobs]);
+  }, [jobs, hasResume, resumeSkills, resumeAnalysis]);
 
-  // Multi-select status filtering
+  // Multi-select status filtering with personalization
   const filteredJobs = useMemo(() => {
     let filtered = jobsWithAnalysis;
+
+    // Apply personalized filtering if user data is available
+    if (profile && preferences && showPersonalization) {
+      filtered = PersonalizedJobService.filterJobsByPreferences(filtered, user);
+    }
 
     // Status filtering (multi-select)
     if (!selectedStatuses.includes('all') && selectedStatuses.length > 0) {
@@ -67,6 +93,11 @@ const JobsPage = () => {
         case 'relevance':
           comparison = a.analysis.score - b.analysis.score;
           break;
+        case 'personalized':
+          const personalizedScoreA = (a as any).personalizedAnalysis?.personalizedScore || a.analysis.score;
+          const personalizedScoreB = (b as any).personalizedAnalysis?.personalizedScore || b.analysis.score;
+          comparison = personalizedScoreA - personalizedScoreB;
+          break;
         case 'title':
           comparison = a.title.localeCompare(b.title);
           break;
@@ -79,7 +110,7 @@ const JobsPage = () => {
     });
 
     return filtered;
-  }, [jobsWithAnalysis, selectedStatuses, companyFilter, searchFilters, sortBy, sortOrder]);
+  }, [jobsWithAnalysis, selectedStatuses, companyFilter, searchFilters, sortBy, sortOrder, profile, preferences, showPersonalization, user]);
 
   // Pagination
   const totalPages = Math.ceil(filteredJobs.length / jobsPerPage);
@@ -340,6 +371,40 @@ const JobsPage = () => {
         </div>
       )}
 
+      {/* Personalization Toggle */}
+      {(profile || preferences) && (
+        <div className="mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-medium text-blue-900">Personalized Job Matching</h3>
+                  <p className="text-sm text-blue-700">
+                    Jobs are filtered and ranked based on your profile, skills, and preferences
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showPersonalization}
+                  onChange={(e) => setShowPersonalization(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-blue-900">
+                  {showPersonalization ? 'Enabled' : 'Disabled'}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Compact Filter Section */}
       <div className="bg-white border-b border-gray-200 mb-6 py-3">
         <div className="px-4">
@@ -409,13 +474,15 @@ const JobsPage = () => {
                 value={`${sortBy}-${sortOrder}`}
                 onChange={(e) => {
                   const [sort, order] = e.target.value.split('-');
-                  setSortBy(sort as 'date' | 'relevance' | 'title' | 'company');
+                  setSortBy(sort as 'date' | 'relevance' | 'title' | 'company' | 'personalized');
                   setSortOrder(order as 'asc' | 'desc');
                 }}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
+                <option value="personalized-desc">Best Match First</option>
                 <option value="date-desc">Latest First</option>
                 <option value="date-asc">Oldest First</option>
+                <option value="relevance-desc">Relevance High-Low</option>
                 <option value="title-asc">Title A-Z</option>
                 <option value="title-desc">Title Z-A</option>
                 <option value="company-asc">Company A-Z</option>
@@ -451,6 +518,21 @@ const JobsPage = () => {
                 const isExpanded = expandedCards.has(job.id);
                 const analysis = job.analysis;
                 
+                // Use PersonalizedJobCard if user data is available
+                if (profile && preferences && showPersonalization) {
+                  return (
+                    <PersonalizedJobCard
+                      key={job.id}
+                      job={job}
+                      user={user}
+                      onApply={(job) => console.log('Apply to job:', job)}
+                      onSave={(job) => handleSaveToggle(job.id, job.status)}
+                      showInsights={true}
+                    />
+                  );
+                }
+                
+                // Fallback to original job card
                 return (
                   <div 
                     key={job.id} 

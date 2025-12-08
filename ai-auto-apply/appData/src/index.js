@@ -13,10 +13,15 @@ import 'dotenv/config';
 
 // Import only essential routes
 import aiApplyRoutes from './routes/aiApplyRoutes.js';
+import aiApplyPipelineRoutes from './routes/aiApplyPipelineRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
+import pdfProcessingRoutes from './routes/pdfProcessingRoutes.js';
+import ocrRoutes from './routes/ocrRoutes.js';
 import documentManagementRoutes from './routes/documentManagementRoutes.js';
 import emailApplicationsRoutes from './routes/applications-email.js';
 import emailUserDataRoutes from './routes/email-user-data.js';
 import jobStatusesRoutes from './routes/job-statuses.js';
+import userRoutes from './routes/userRoutes.js';
 
 const app = express();
 
@@ -65,6 +70,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/ai-apply', aiApplyRoutes);
 console.log('[DEBUG] AI Apply routes registered');
 
+app.use('/api/ai-apply-pipeline', aiApplyPipelineRoutes);
+console.log('[DEBUG] AI Apply Pipeline routes registered');
+
+app.use('/api/ai', aiRoutes);
+console.log('[DEBUG] AI routes registered');
+
+app.use('/api/pdf-processing', pdfProcessingRoutes);
+console.log('[DEBUG] PDF Processing routes registered');
+
+app.use('/api/ocr', ocrRoutes);
+console.log('[DEBUG] OCR routes registered');
+
 app.use('/api/documents', documentManagementRoutes);
 console.log('[DEBUG] Document management routes registered');
 
@@ -76,6 +93,9 @@ console.log('[DEBUG] Email user data routes registered');
 
 app.use('/api/job-statuses', jobStatusesRoutes);
 console.log('[DEBUG] Job statuses routes registered');
+
+app.use('/api/user', userRoutes);
+console.log('[DEBUG] Unified user routes registered');
 
 // Start server
 app.listen(PORT, () => {

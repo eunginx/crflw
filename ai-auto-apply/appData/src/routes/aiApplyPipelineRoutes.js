@@ -144,20 +144,30 @@ router.post('/generate-cover-letter', async (req, res) => {
 
     const resume = resumeResult.rows[0];
     
-    // Mock cover letter generation (in production, this would use Ollama)
-    const mockCoverLetter = {
-      content: `Dear Hiring Manager,
+    // Call AI service for cover letter generation
+    const aiServiceResponse = await fetch('http://localhost:9000/api/cover-letter/generate-cover-letter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        resumeText: resume.extracted_text || '',
+        jobDescription: jobDetails?.description || '',
+        companyName: jobDetails?.company || '',
+        roleTitle: jobDetails?.title || ''
+      })
+    });
 
-I am excited to apply for the ${jobDetails?.title || 'position'} at ${jobDetails?.company || 'your company'}. With my strong background in software development and passion for creating innovative solutions, I believe I would be a valuable addition to your team.
+    if (!aiServiceResponse.ok) {
+      throw new Error(`AI service responded with status: ${aiServiceResponse.status}`);
+    }
 
-My experience in ${resume.skills?.technical?.join(', ') || 'various technologies'} aligns perfectly with the requirements of this role. I have consistently demonstrated the ability to deliver high-quality code and collaborate effectively with cross-functional teams.
+    // The new service returns plain text directly
+    const coverLetterContent = await aiServiceResponse.text();
 
-What sets me apart is my commitment to continuous learning and my proactive approach to problem-solving. I thrive in environments where I can contribute to both technical excellence and business growth.
-
-I would welcome the opportunity to discuss how my skills and experience can benefit your organization. Thank you for considering my application.
-
-Sincerely,
-${resume.contact_info?.name || 'Applicant'}`,
+    // Create cover letter object
+    const generatedCoverLetter = {
+      content: coverLetterContent,
       tone: 'Professional',
       length: 'Medium',
       customization: 'High',
@@ -175,11 +185,11 @@ ${resume.contact_info?.name || 'Applicant'}`,
           userId,
           resumeId,
           jobId,
-          mockCoverLetter.content,
+          generatedCoverLetter.content,
           JSON.stringify({
-            tone: mockCoverLetter.tone,
-            length: mockCoverLetter.length,
-            customization: mockCoverLetter.customization
+            tone: generatedCoverLetter.tone,
+            length: generatedCoverLetter.length,
+            customization: generatedCoverLetter.customization
           })
         ]
       );
@@ -189,7 +199,7 @@ ${resume.contact_info?.name || 'Applicant'}`,
 
     res.json({
       success: true,
-      data: mockCoverLetter
+      data: generatedCoverLetter
     });
 
   } catch (error) {

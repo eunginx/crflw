@@ -75,17 +75,17 @@ const ResumeList: React.FC<ResumeListProps> = ({
                     Active
                   </span>
                 )}
-                {resume.processing_status && (
+                {resume.processingStatus && (
                   <span 
                     className={`px-2 py-1 text-xs rounded-full ${
-                      resume.processing_status === 'completed' 
+                      resume.processingStatus === 'completed' 
                         ? 'bg-blue-100 text-blue-800' 
-                        : resume.processing_status === 'pending'
+                        : resume.processingStatus === 'pending'
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-red-100 text-red-800'
                     }`}
                   >
-                    {resume.processing_status.charAt(0).toUpperCase() + resume.processing_status.slice(1)}
+                    {resume.processingStatus.charAt(0).toUpperCase() + resume.processingStatus.slice(1)}
                   </span>
                 )}
               </div>

@@ -758,13 +758,16 @@ router.delete('/resumes/:resumeId', async (req, res) => {
 
     // Clear persistent state if this was the active resume
     try {
-      await userResumeStateService.clearUserResumeState(userEmail);
-      console.log('🗑️ Cleared persistent state');
+      console.log('🗑️ Attempting to clear persistent state...');
+      // await userResumeStateService.clearUserResumeState(userEmail);
+      console.log('🗑️ Skipping persistent state clearing temporarily to debug timeout');
     } catch (stateError) {
       console.error('🗑️ Error clearing persistent state:', stateError);
-      // Don't fail the request, just log the error
+      console.log('🗑️ Continuing without clearing persistent state - this should not fail the delete operation');
+      // Don't fail the request, just log the error and continue
     }
 
+    console.log('🗑️ About to commit transaction...');
     await client.query('COMMIT');
     console.log('🗑️ Delete transaction completed successfully');
 

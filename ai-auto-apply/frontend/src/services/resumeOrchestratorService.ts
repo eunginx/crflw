@@ -46,7 +46,7 @@ export class ResumeOrchestratorService {
         original_filename: file.name,
         upload_date: new Date().toISOString(),
         is_active: false,
-        processing_status: 'pending'
+        processingStatus: 'pending'
       };
 
       // Step 3: Process document and get unified result
@@ -94,7 +94,7 @@ export class ResumeOrchestratorService {
 
       // Get screenshot
       let previewImage = '';
-      if (processingResults.screenshotPath) {
+      if (processingResults.screenshotPaths && processingResults.screenshotPaths.length > 0) {
         previewImage = await this.getScreenshotBase64(documentId);
       }
 
@@ -188,8 +188,8 @@ export class ResumeOrchestratorService {
         documents.map(async (doc) => {
           let processed: UnifiedResumeResult | undefined;
           
-          // Use processing_status to determine if processed
-          if (doc.processing_status === 'completed') {
+          // Use processingStatus to determine if processed
+          if (doc.processingStatus === 'completed') {
             try {
               processed = await this.processDocumentUnified(doc.id);
             } catch (error) {
@@ -200,7 +200,7 @@ export class ResumeOrchestratorService {
           return { 
             ...doc, 
             upload_date: doc.uploaded_at, // Add upload_date field from uploaded_at
-            processing_status: doc.processing_status as "completed" | "pending" | "error" | "processing",
+            processingStatus: doc.processingStatus as "completed" | "pending" | "error" | "processing",
             processed 
           };
         })
@@ -280,12 +280,12 @@ export class ResumeOrchestratorService {
     return {
       ...document,
       upload_date: document.uploaded_at, // Add upload_date field
-      processing_status: document.processing_status as "completed" | "pending" | "error" | "processing",
+      processingStatus: document.processingStatus as "completed" | "pending" | "error" | "processing",
       filename: document.original_filename, // Map filename field
       file_size: document.file_size_bytes, // Map file_size field
       mime_type: document.file_type, // Map mime_type field
       updated_at: document.uploaded_at, // Use uploaded_at as updated_at
-      processed_at: document.processing_status === 'completed' ? document.uploaded_at : undefined
+      processed_at: document.processingStatus === 'completed' ? document.uploaded_at : undefined
     };
   }
 
@@ -311,7 +311,7 @@ export class ResumeOrchestratorService {
         textLength: results.textLength,
         filename: results.processingResultId || 'Unknown',
         processedAt: results.processedAt,
-        screenshotPath: results.screenshotPath,
+        screenshotPaths: results.screenshotPaths || [],
         textFilePath: results.textFilePath,
         metadata
       };

@@ -7,6 +7,31 @@ set -e
 
 echo "🛑 Stopping AI Auto Apply Local Environment..."
 
+# Load NVM if available
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  echo "📦 Loading NVM..."
+  source "$NVM_DIR/nvm.sh"
+  source "$NVM_DIR/bash_completion"
+fi
+
+# Function to get Node version of a process
+get_process_node_version() {
+  local pid="$1"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    local node_cmd=$(ps -p "$pid" -o command= 2>/dev/null | grep -E "node|npm" | head -1)
+    if [ -n "$node_cmd" ]; then
+      # Try to get the node version from the process
+      local node_version=$(ps -p "$pid" -o args= 2>/dev/null | grep -o "v[0-9]*" | head -1)
+      echo "${node_version:-"unknown"}"
+    else
+      echo "not-node"
+    fi
+  else
+    echo "dead"
+  fi
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,20 +49,36 @@ kill_port() {
     local pid=$(lsof -ti:$port 2>/dev/null || true)
     
     if [ ! -z "$pid" ]; then
-        echo -e "${YELLOW}🛑 Stopping $service_name (PID: $pid) on port $port...${NC}"
+        local node_version=$(get_process_node_version "$pid")
+        echo -e "${YELLOW}🛑 Stopping $service_name (PID: $pid, Node: $node_version) on port $port...${NC}"
+        
+        # Try graceful shutdown first
         kill -TERM $pid 2>/dev/null || true
         
         # Wait for graceful shutdown
         echo -e "${BLUE}⏳ Waiting for graceful shutdown...${NC}"
-        sleep 3
+        local wait_count=0
+        local max_wait=10
+        
+        while [ $wait_count -lt $max_wait ] && kill -0 "$pid" 2>/dev/null; do
+            sleep 1
+            wait_count=$((wait_count + 1))
+            echo -e "${BLUE}  ⏱️  Waiting... ($wait_count/$max_wait)${NC}"
+        done
         
         # Force kill if still running
-        if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+        if kill -0 "$pid" 2>/dev/null; then
             echo -e "${RED}💥 Force killing $service_name...${NC}"
             kill -9 $pid 2>/dev/null || true
+            sleep 1
         fi
         
-        echo -e "${GREEN}✅ $service_name stopped${NC}"
+        # Verify process is dead
+        if ! kill -0 "$pid" 2>/dev/null; then
+            echo -e "${GREEN}✅ $service_name stopped successfully${NC}"
+        else
+            echo -e "${RED}❌ $service_name may still be running${NC}"
+        fi
     else
         echo -e "${BLUE}ℹ️  No process found on port $port${NC}"
     fi
@@ -49,19 +90,42 @@ kill_saved_pids() {
         echo -e "${BLUE}📋 Stopping services using saved PIDs...${NC}"
         while read -r pid; do
             if [ ! -z "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                echo -e "${YELLOW}🛑 Stopping process PID: $pid${NC}"
+                local node_version=$(get_process_node_version "$pid")
+                echo -e "${YELLOW}🛑 Stopping process PID: $pid (Node: $node_version)${NC}"
                 kill -TERM "$pid" 2>/dev/null || true
+            else
+                echo -e "${BLUE}ℹ️  Process PID: $pid not running${NC}"
             fi
         done < logs/pids.txt
         
         # Wait for graceful shutdown
         echo -e "${BLUE}⏳ Waiting for graceful shutdown...${NC}"
-        sleep 3
+        local wait_count=0
+        local max_wait=10
+        
+        while [ $wait_count -lt $max_wait ]; do
+            local still_running=false
+            while read -r pid; do
+                if [ ! -z "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                    still_running=true
+                    break
+                fi
+            done < logs/pids.txt
+            
+            if [ "$still_running" = false ]; then
+                break
+            fi
+            
+            sleep 1
+            wait_count=$((wait_count + 1))
+            echo -e "${BLUE}  ⏱️  Waiting... ($wait_count/$max_wait)${NC}"
+        done
         
         # Force kill any remaining processes
         while read -r pid; do
             if [ ! -z "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                echo -e "${RED}💥 Force killing PID: $pid${NC}"
+                local node_version=$(get_process_node_version "$pid")
+                echo -e "${RED}💥 Force killing PID: $pid (Node: $node_version)${NC}"
                 kill -9 "$pid" 2>/dev/null || true
             fi
         done < logs/pids.txt

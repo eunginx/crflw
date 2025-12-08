@@ -15,23 +15,46 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
   source "$NVM_DIR/bash_completion"
 fi
 
-# Ensure correct Node version
-REQUIRED_NODE_MAJOR=20
-NODE_MAJOR=$(node -v | sed 's/v\([0-9]*\).*/\1/')
-
-if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
-  echo "❌ Node $REQUIRED_NODE_MAJOR+ is required. You are running Node $(node -v)."
-  echo "🔄 Auto-switching to Node 20..."
-  nvm install 20
-  nvm use 20
-  NODE_MAJOR=$(node -v | sed 's/v\([0-9]*\).*/\1/')
-  if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
-    echo "❌ Failed to switch to Node 20. Please manually run: nvm install 20 && nvm use 20"
-    exit 1
+# Function to ensure Node 20 is active
+ensure_node_20() {
+  local service_name="$1"
+  local current_node=$(node -v 2>/dev/null || echo "not installed")
+  local node_major=$(echo "$current_node" | sed 's/v\([0-9]*\).*/\1/' 2>/dev/null || echo "0")
+  
+  echo "🔍 $service_name - Current Node: $current_node"
+  
+  if [ "$node_major" != "20" ]; then
+    echo "🔄 $service_name - Switching to Node 20..."
+    if command -v nvm >/dev/null 2>&1; then
+      nvm install 20 >/dev/null 2>&1 || true
+      nvm use 20 >/dev/null 2>&1 || {
+        echo "❌ $service_name - Failed to switch to Node 20"
+        return 1
+      }
+    else
+      echo "❌ $service_name - NVM not available, cannot switch Node versions"
+      return 1
+    fi
   fi
-fi
+  
+  local verify_node=$(node -v 2>/dev/null || echo "failed")
+  local verify_major=$(echo "$verify_node" | sed 's/v\([0-9]*\).*/\1/' 2>/dev/null || echo "0")
+  
+  if [ "$verify_major" = "20" ]; then
+    echo "✅ $service_name - Node 20 confirmed: $verify_node"
+    return 0
+  else
+    echo "❌ $service_name - Node 20 verification failed: $verify_node"
+    return 1
+  fi
+}
 
-echo "✅ Node version check passed: $(node -v)"
+# Global Node 20 check
+echo "🔍 Global Node version check..."
+if ! ensure_node_20 "Global"; then
+  echo "❌ Failed to ensure Node 20 globally. Please run: nvm install 20 && nvm use 20"
+  exit 1
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -161,7 +184,12 @@ echo -e "${BLUE}📦 Checking dependencies...${NC}"
 echo -e "${BLUE}  🔍 Checking frontend dependencies...${NC}"
 if [ ! -d "frontend/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing frontend dependencies...${NC}"
-    cd frontend && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
+    cd frontend
+    if ! ensure_node_20 "Frontend Dependencies"; then
+      echo -e "${RED}  ❌ Frontend dependencies failed Node 20 validation${NC}"
+      exit 1
+    fi
+    npm install && cd ..
     echo -e "${GREEN}  ✅ Frontend dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ Frontend dependencies already installed${NC}"
@@ -170,7 +198,12 @@ fi
 echo -e "${BLUE}  🔍 Checking AI service dependencies...${NC}"
 if [ ! -d "ai-service/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing AI service dependencies...${NC}"
-    cd ai-service && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
+    cd ai-service
+    if ! ensure_node_20 "AI Service Dependencies"; then
+      echo -e "${RED}  ❌ AI service dependencies failed Node 20 validation${NC}"
+      exit 1
+    fi
+    npm install && cd ..
     echo -e "${GREEN}  ✅ AI service dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ AI service dependencies already installed${NC}"
@@ -179,7 +212,12 @@ fi
 echo -e "${BLUE}  🔍 Checking appData dependencies...${NC}"
 if [ ! -d "appData/node_modules" ]; then
     echo -e "${YELLOW}  📥 Installing appData dependencies...${NC}"
-    cd appData && nvm use 20 > /dev/null 2>&1 && npm install && cd ..
+    cd appData
+    if ! ensure_node_20 "AppData Dependencies"; then
+      echo -e "${RED}  ❌ AppData dependencies failed Node 20 validation${NC}"
+      exit 1
+    fi
+    npm install && cd ..
     echo -e "${GREEN}  ✅ AppData dependencies installed${NC}"
 else
     echo -e "${GREEN}  ✅ AppData dependencies already installed${NC}"
@@ -197,10 +235,12 @@ echo ""
 # Start appData (Backend) on port 8000
 echo -e "${BLUE}🔧 Starting Backend (appData) on port 8000...${NC}"
 cd appData
+if ! ensure_node_20 "Backend Service"; then
+  echo -e "${RED}❌ Backend service failed Node 20 validation${NC}"
+  exit 1
+fi
 echo -e "${YELLOW}  📝 Command: PORT=8000 npm run dev${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/backend.log${NC}"
-# Ensure Node 20 is used for this service
-nvm use 20 > /dev/null 2>&1
 PORT=8000 npm run dev > ../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
@@ -211,10 +251,12 @@ echo ""
 # Start AI Service on port 9000
 echo -e "${BLUE}🤖 Starting AI Service on port 9000...${NC}"
 cd ai-service
+if ! ensure_node_20 "AI Service"; then
+  echo -e "${RED}❌ AI service failed Node 20 validation${NC}"
+  exit 1
+fi
 echo -e "${YELLOW}  📝 Command: PORT=9000 npm run dev${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/ai-service.log${NC}"
-# Ensure Node 20 is used for this service
-nvm use 20 > /dev/null 2>&1
 PORT=9000 npm run dev > ../logs/ai-service.log 2>&1 &
 AI_SERVICE_PID=$!
 cd ..
@@ -225,10 +267,12 @@ echo ""
 # Start Frontend on port 3000
 echo -e "${BLUE}🌐 Starting Frontend on port 3000...${NC}"
 cd frontend
+if ! ensure_node_20 "Frontend Service"; then
+  echo -e "${RED}❌ Frontend service failed Node 20 validation${NC}"
+  exit 1
+fi
 echo -e "${YELLOW}  📝 Command: PORT=3000 npm run start:fast${NC}"
 echo -e "${YELLOW}  📄 Log file: ../logs/frontend.log${NC}"
-# Ensure Node 20 is used for this service
-nvm use 20 > /dev/null 2>&1
 PORT=3000 npm run start:fast > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..

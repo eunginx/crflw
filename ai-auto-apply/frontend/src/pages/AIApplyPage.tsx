@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 import { useAIApplyManager } from '../hooks/useAIApplyManager';
+import { useUnifiedResumeManager } from '../hooks/useUnifiedResumeManager';
 import ResumeUpload from '../components/AIApply/ResumeUpload';
 import ResumeList from '../components/AIApply/ResumeList';
 import DocumentInfoCard from '../components/AIApply/DocumentInfoCard';
@@ -19,11 +21,11 @@ import CoverLetterCard from '../components/CoverLetter/CoverLetterCard';
 import JobSelection from '../components/CoverLetter/JobSelection';
 import { ProcessingSkeleton, AnalysisSkeleton, ResumeListSkeleton } from '../components/AIApply/LoadingSkeletons';
 import CurrentStatus from '../components/AIApply/CurrentStatus';
+import OCRTestComponent from '../components/AIApply/OCRTestComponent';
 
 const AIApplyPage: React.FC = () => {
   const { currentUser, loading } = useAuth();
   const navigate = useNavigate();
-  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [needsProcessing, setNeedsProcessing] = useState(true); // Default to true for safety
@@ -37,13 +39,14 @@ const AIApplyPage: React.FC = () => {
   const [dataResumeId, setDataResumeId] = useState<string | null>(null);
   const [analysisResumeId, setAnalysisResumeId] = useState<string | null>(null); // Track analysis per resume
 
-  // Use the new AI Apply manager hook (must be called before early returns)
+  // Use the unified resume manager (must be called before early returns)
+  const unifiedResumeManager = useUnifiedResumeManager();
   const aiApplyManager = useAIApplyManager(currentUser?.email || '');
 
   // Check if user needs to process resume
   useEffect(() => {
     const checkProcessingStatus = async () => {
-      if (currentUser?.email && aiApplyManager.activeResume) {
+      if (currentUser?.email && unifiedResumeManager.activeResume) {
         try {
           const status = await aiApplyManager.checkIfNeedsProcessing(currentUser.email);
           setNeedsProcessing(status.data.needsProcessing);
@@ -57,38 +60,73 @@ const AIApplyPage: React.FC = () => {
     };
 
     checkProcessingStatus();
-  }, [currentUser, aiApplyManager.activeResume, aiApplyManager.processingResults]);
+  }, [currentUser, unifiedResumeManager.activeResume, aiApplyManager.processingResults]);
 
-  // Manual AI analysis function
+  // Manual AI analysis function with enhanced comprehensive analysis
   const handleAnalyzeResume = async () => {
+    console.log('🧠 === RESUME ANALYSIS DEBUG START ===');
+    console.log('🧠 handleAnalyzeResume called');
+    console.log('🧠 Processing results available:', !!aiApplyManager.processingResults);
+    console.log('🧠 Active resume:', unifiedResumeManager.activeResume);
+    console.log('🧠 Current user email:', currentUser?.email);
+    
     if (!aiApplyManager.processingResults) {
+      console.log('🧠 ERROR: No processing results available');
       setError('Please process your resume first before analyzing.');
       return;
     }
 
+    console.log('🧠 Processing results details:', {
+      hasExtractedText: !!aiApplyManager.processingResults.extractedText,
+      textLength: aiApplyManager.processingResults.extractedText?.length,
+      numPages: aiApplyManager.processingResults.numPages,
+      screenshotPaths: aiApplyManager.processingResults.screenshotPaths?.length
+    });
+
     setIsAnalyzing(true);
     try {
-      console.log('🧠 Starting AI analysis...');
-      const analysisResults = await aiApplyManager.runAIAnalysis(
-        aiApplyManager.processingResults.extractedText || '',
-        JSON.stringify(aiApplyManager.processingResults),
-        [] // Resume sections would be extracted from processing results
+      console.log('🧠 Starting enhanced AI analysis with image + text...');
+      console.log('🧠 Resume ID to analyze:', unifiedResumeManager.activeResume?.id || '');
+      console.log('🧠 User email for analysis:', currentUser?.email);
+      
+      // Use the enhanced comprehensive analysis endpoint
+      const analysisResults = await aiApplyManager.startAIAnalysis(
+        unifiedResumeManager.activeResume?.id || ''
       );
+      
+      console.log('🧠 AI analysis completed successfully');
+      console.log('🧠 Analysis results:', analysisResults);
+      
       setAiAnalysis(analysisResults);
       setAnalysisCompleted(true);
-      setAnalysisResumeId(aiApplyManager.activeResume?.id || null); // Track which resume was analyzed
-      console.log('🧠 AI analysis completed:', analysisResults);
+      setAnalysisResumeId(unifiedResumeManager.activeResume?.id || null); // Track which resume was analyzed
+      console.log('🧠 Enhanced AI analysis completed:', analysisResults);
     } catch (error) {
-      console.error('Error running AI analysis:', error);
+      console.error('🧠 ERROR: Failed to run enhanced AI analysis:', error);
+      
+      // Type-safe error handling
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const axiosError = error as any;
+      const errorResponse = axiosError?.response?.data;
+      const errorStatus = axiosError?.response?.status;
+      
+      console.error('🧠 Error details:', {
+        message: errorMessage,
+        stack: errorStack,
+        response: errorResponse,
+        status: errorStatus
+      });
       setError('Failed to analyze resume. Please try again.');
     } finally {
       setIsAnalyzing(false);
+      console.log('🧠 === RESUME ANALYSIS DEBUG END ===');
     }
   };
 
   // Clear analysis state when resume changes (only if different resume)
   useEffect(() => {
-    const currentResumeId = aiApplyManager.activeResume?.id || null;
+    const currentResumeId = unifiedResumeManager.activeResume?.id || null;
     
     if (dataResumeId && currentResumeId && dataResumeId !== currentResumeId) {
       // Resume changed, clear all analysis data
@@ -104,7 +142,7 @@ const AIApplyPage: React.FC = () => {
       // First time setting a resume
       setDataResumeId(currentResumeId);
     }
-  }, [aiApplyManager.activeResume?.id, dataResumeId]);
+  }, [unifiedResumeManager.activeResume?.id, dataResumeId]);
 
   // Clear all states when active resume is deleted (processingResults becomes null)
   useEffect(() => {
@@ -159,93 +197,6 @@ const AIApplyPage: React.FC = () => {
     return null;
   }
 
-  const handleApplyToJobs = async () => {
-    if (!aiApplyManager.activeResume) {
-      setError('Please select an active resume first');
-      return;
-    }
-    
-    setIsProcessing(true);
-    setError(null);
-    
-    try {
-      console.log('🚀 Starting AI Apply pipeline...');
-      
-      // Step 1: Get job matches
-      const jobMatchesResponse = await aiApplyManager.getJobMatches(
-        aiApplyManager.activeResume.id,
-        currentUser?.email || '',
-        {}
-      );
-      
-      if (!jobMatchesResponse.success) {
-        throw new Error('Failed to get job matches');
-      }
-      
-      console.log(`✅ Found ${jobMatchesResponse.data.totalMatches} job matches`);
-      
-      // Step 2: For each top match, generate cover letter and submit application
-      const topJobs = jobMatchesResponse.data.jobs.slice(0, 3); // Top 3 matches
-      const applications = [];
-      
-      for (const job of topJobs) {
-        try {
-          // Generate cover letter
-          const coverLetterResponse = await aiApplyManager.generateCoverLetter(
-            aiApplyManager.activeResume.id,
-            currentUser?.email || '',
-            job.id,
-            job
-          );
-          
-          // Auto-fill application data
-          const autoFillResponse = await aiApplyManager.autoFillApplication(
-            aiApplyManager.activeResume.id,
-            currentUser?.email || '',
-            job.id
-          );
-          
-          // Submit application
-          const submitResponse = await aiApplyManager.submitApplication(
-            aiApplyManager.activeResume.id,
-            currentUser?.email || '',
-            job.id,
-            autoFillResponse.data.autoFillData,
-            coverLetterResponse.data.id
-          );
-          
-          applications.push({
-            job: job.title,
-            company: job.company,
-            status: submitResponse.data.status,
-            applicationId: submitResponse.data.applicationId
-          });
-          
-          console.log(`✅ Applied to ${job.title} at ${job.company}`);
-          
-        } catch (jobError) {
-          console.error(`❌ Failed to apply to ${job.title}:`, jobError);
-          // Continue with other jobs even if one fails
-        }
-      }
-      
-      // Show success message
-      const successMessage = `Successfully submitted ${applications.length} applications!`;
-      setError(null);
-      
-      // You could show a success modal or update UI here
-      alert(successMessage);
-      
-      console.log('🎉 AI Apply pipeline completed:', applications);
-      
-    } catch (error) {
-      setError('Failed to complete AI Apply process. Please try again.');
-      console.error('AI Apply error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto p-8 space-y-8">
       {/* Page Header */}
@@ -272,43 +223,59 @@ const AIApplyPage: React.FC = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-900">Resume</h2>
-          {aiApplyManager.activeResume && (
-            <button
-              onClick={() => document.getElementById('resume-upload-input')?.click()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              Upload New
-            </button>
+          {unifiedResumeManager.activeResume && (
+            <>
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    unifiedResumeManager.uploadResume(file);
+                    e.target.value = '';
+                  }
+                }}
+                disabled={unifiedResumeManager.uploading}
+                className="hidden"
+                id="resume-upload-input"
+              />
+              <button
+                onClick={() => document.getElementById('resume-upload-input')?.click()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                Upload New
+              </button>
+            </>
           )}
         </div>
 
         {/* Resume Upload Section */}
-        {!aiApplyManager.activeResume && (
+        {!unifiedResumeManager.activeResume && (
           <ResumeUpload
-            uploading={aiApplyManager.uploading}
-            onUpload={aiApplyManager.uploadResume}
+            uploading={unifiedResumeManager.uploading}
+            onUpload={unifiedResumeManager.uploadResume}
             userEmail={currentUser?.email || ''}
             disabled={false}
           />
         )}
 
         {/* Resume Management Section */}
-        {aiApplyManager.loading && <ResumeListSkeleton />}
+        {unifiedResumeManager.loading && <ResumeListSkeleton />}
         
-        {!aiApplyManager.loading && aiApplyManager.resumes.length > 0 && (
+        {!unifiedResumeManager.loading && unifiedResumeManager.resumes.length > 0 && (
           <ResumeList
-            resumes={aiApplyManager.resumes}
-            activeResume={aiApplyManager.activeResume}
-            onSetActive={aiApplyManager.setActiveResume}
-            onDelete={aiApplyManager.deleteResume}
+            resumes={unifiedResumeManager.resumes}
+            activeResume={unifiedResumeManager.activeResume}
+            onSetActive={unifiedResumeManager.setActiveResume}
+            onDelete={unifiedResumeManager.deleteResume}
             onProcess={aiApplyManager.processResume}
             onAIAnalysis={aiApplyManager.startAIAnalysis}
-            loading={aiApplyManager.loading}
+            loading={unifiedResumeManager.loading}
             processing={aiApplyManager.processing}
           />
         )}
         
-        {!aiApplyManager.loading && aiApplyManager.resumes.length === 0 && currentUser && (
+        {!unifiedResumeManager.loading && unifiedResumeManager.resumes.length === 0 && currentUser && (
           <div className="text-center py-8 text-gray-500">
             <p>No resumes found. Upload your first resume to get started!</p>
           </div>
@@ -322,11 +289,11 @@ const AIApplyPage: React.FC = () => {
       </div>
 
       {/* PDF Processing Section */}
-      {aiApplyManager.activeResume && !aiApplyManager.processingResults && needsProcessing && (
+      {unifiedResumeManager.activeResume && !aiApplyManager.processingResults && needsProcessing && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Resume Processing</h3>
           <button
-            onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id || '')}
+            onClick={() => aiApplyManager.processResume(unifiedResumeManager.activeResume?.id || '')}
             disabled={aiApplyManager.processing}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -336,7 +303,7 @@ const AIApplyPage: React.FC = () => {
       )}
 
       {/* Show when processing is up to date */}
-      {aiApplyManager.activeResume && !needsProcessing && !aiApplyManager.processingResults && (
+      {unifiedResumeManager.activeResume && !needsProcessing && !aiApplyManager.processingResults && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Resume Processing</h3>
           <div className="flex items-center gap-3 text-green-600">
@@ -347,7 +314,7 @@ const AIApplyPage: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => aiApplyManager.processResume(aiApplyManager.activeResume?.id || '')}
+            onClick={() => aiApplyManager.processResume(unifiedResumeManager.activeResume?.id || '')}
             disabled={aiApplyManager.processing}
             className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
@@ -358,214 +325,333 @@ const AIApplyPage: React.FC = () => {
 
       {aiApplyManager.processing && <ProcessingSkeleton />}
 
-      {/* Processing Results Section */}
-      {aiApplyManager.processingResults && (
+{/* Processing Results Section - Only show if we have valid data */}
+      {aiApplyManager.processingResults && aiApplyManager.processingResults.extractedText && (
         <div className="space-y-8">
-          {/* Document Info & Metadata */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <DocumentInfoCard
-              filename={aiApplyManager.activeResume?.file_path || ''}
-              uploadedAt={aiApplyManager.activeResume?.upload_date || ''}
-              fileSize={aiApplyManager.activeResume?.file_size || 0}
-              originalFilename={aiApplyManager.activeResume?.original_filename || ''}
-            />
-            <PDFMetadataCard
-              title={aiApplyManager.processingResults.title}
-              author={aiApplyManager.processingResults.author}
-              creator={aiApplyManager.processingResults.creator}
-              producer={aiApplyManager.processingResults.producer}
-              totalPages={aiApplyManager.processingResults.numPages || 0}
-              processedAt={aiApplyManager.processingResults.processedAt || ''}
-            />
-          </div>
-
-          {/* Extracted Text & Resume Preview Grouped */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <ExtractedTextCard
-              text={aiApplyManager.processingResults.extractedText}
-              textLength={aiApplyManager.processingResults.textLength}
-              filename={aiApplyManager.activeResume?.original_filename}
-            />
-            <ResumePreview
-              screenshotPaths={(() => {
-                const paths = aiApplyManager.processingResults.screenshotPaths || [];
-                console.log('🖼️ AIApplyPage DEBUG - Screenshot paths calculation:', {
-                  screenshotPaths: aiApplyManager.processingResults.screenshotPaths,
-                  pathsCount: paths.length,
-                  processingResults: aiApplyManager.processingResults
-                });
-                return paths;
-              })()}
-              filename={aiApplyManager.activeResume?.original_filename}
-              totalPages={aiApplyManager.processingResults.numPages}
-            />
-          </div>
-
-          {/* Resume Intelligence - Show after processing is complete */}
-          {aiApplyManager.processingResults && (
-            <ResumeIntelligenceCard
-              resumeText={aiApplyManager.processingResults.extractedText || ''}
-              resumeId={aiApplyManager.activeResume?.id}
-              onIntelligenceApplied={(intelligence) => {
-                console.log('🎉 Resume intelligence applied successfully!');
-                setResumeIntelligence(intelligence);
-                // Refresh user data to show updated profile/preferences
-                // This will trigger a reload of user context
-              }}
-            />
-          )}
-
-          {/* Job Selection - Show after resume intelligence is available */}
-          {resumeIntelligence && (
-            <JobSelection
-              jobs={[
-                {
-                  id: 'job-1',
-                  title: 'Senior Frontend Developer',
-                  company: 'TechCorp India',
-                  location: 'Bengaluru, Karnataka',
-                  description: 'Looking for experienced React developer with TypeScript skills...',
-                  keywords: ['React', 'TypeScript', 'Node.js'],
-                  responsibilities: ['Develop responsive web applications', 'Collaborate with cross-functional teams'],
-                  requirements: ['5+ years experience', 'React expertise'],
-                  matchScore: 85,
-                  personalizedScore: 90,
-                  salary: '₹18L - ₹28L'
-                },
-                {
-                  id: 'job-2',
-                  title: 'Full Stack Engineer',
-                  company: 'StartupXYZ',
-                  location: 'Mumbai, Maharashtra',
-                  description: 'Seeking full stack developer with Node.js and React experience...',
-                  keywords: ['Node.js', 'React', 'MongoDB'],
-                  responsibilities: ['Build full-stack applications', 'Design system architecture'],
-                  requirements: ['Full-stack experience', 'Cloud knowledge'],
-                  matchScore: 78,
-                  personalizedScore: 82,
-                  salary: '₹15L - ₹25L'
-                }
-              ]}
-              selectedJob={selectedJob}
-              onJobSelect={setSelectedJob}
-            />
-          )}
-
-          {/* Cover Letter Generator - Show after job selection */}
-          {resumeIntelligence && selectedJob && (
-            <CoverLetterCard
-              resumeIntelligence={resumeIntelligence}
-              selectedJob={selectedJob}
-              ollamaBaseUrl="http://localhost:9000"
-            />
-          )}
-
-          {/* AI Analysis Section - Only show after processing is complete */}
-          {aiApplyManager.processingResults && (
-            <div className="space-y-8">
-              {/* Analyze Button - Only show if analysis hasn't been completed for this resume */}
-              {(!analysisCompleted || analysisResumeId !== aiApplyManager.activeResume?.id) && (
-                <div className="bg-white rounded-lg shadow-sm p-6 text-center">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ready to Analyze Your Resume</h3>
-                  <p className="text-gray-600 mb-6">
-                    Get AI-powered insights about your resume
-                  </p>
-                  <button
-                    onClick={handleAnalyzeResume}
-                    disabled={isAnalyzing}
-                    className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Analyzing Resume...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        Analyze Resume
-                      </>
-                    )}
-                  </button>
-                  {error && (
-                    <div className="mt-4 text-sm text-red-600">
-                      {error}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* AI Analysis Results - Only show after analysis is completed for current resume */}
-              {analysisCompleted && analysisResumeId === aiApplyManager.activeResume?.id && aiAnalysis && (
-                <>
-                {/* Aesthetic Score */}
-                {aiAnalysis?.aesthetic && (
-                <AestheticScoreCard
-                  score={aiAnalysis.aesthetic.score}
-                  strengths={aiAnalysis.aesthetic.strengths}
-                  improvements={aiAnalysis.aesthetic.improvements}
-                  assessment={aiAnalysis.aesthetic.assessment}
+          {/* Extracted Text & Resume Preview - Only show if we have text content */}
+          {aiApplyManager.processingResults.extractedText && aiApplyManager.processingResults.extractedText.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <ExtractedTextCard
+                text={aiApplyManager.processingResults.extractedText}
+                textLength={aiApplyManager.processingResults.textLength}
+                filename={aiApplyManager.activeResume?.original_filename}
+              />
+              {aiApplyManager.processingResults.screenshotPaths && aiApplyManager.processingResults.screenshotPaths.length > 0 && (
+                <ResumePreview
+                  screenshotPaths={(() => {
+                    const paths = aiApplyManager.processingResults.screenshotPaths || [];
+                    console.log('🖼️ AIApplyPage DEBUG - Screenshot paths calculation:', {
+                      screenshotPaths: aiApplyManager.processingResults.screenshotPaths,
+                      pathsCount: paths.length,
+                      processingResults: aiApplyManager.processingResults
+                    });
+                    return paths;
+                  })()}
+                  filename={unifiedResumeManager.activeResume?.original_filename}
+                  totalPages={aiApplyManager.processingResults.numPages}
                 />
-              )}
-
-              {/* Skills */}
-              {aiAnalysis?.skills && (
-                <SkillsCard
-                  skills={aiAnalysis.skills}
-                />
-              )}
-
-              {/* Recommendations */}
-              {aiAnalysis?.recommendations && (
-                (aiAnalysis.recommendations.recommendations?.length > 0 || 
-                 aiAnalysis.recommendations.strengths?.length > 0 || 
-                 aiAnalysis.recommendations.improvements?.length > 0) && (
-                  <RecommendationsCard
-                    recommendations={aiAnalysis.recommendations.recommendations || []}
-                    strengths={aiAnalysis.recommendations.strengths || []}
-                    improvements={aiAnalysis.recommendations.improvements || []}
-                  />
-                )
-              )}
-                </>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* AI Apply Action Button */}
-      {aiApplyManager.processingResults && (
-        <div className="text-center">
-          <button
-            onClick={handleApplyToJobs}
-            disabled={isProcessing || !aiApplyManager.processingResults}
-            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
-          >
-            {isProcessing ? 'Processing...' : 'Start AI Apply'}
-          </button>
-          <p className="text-sm text-gray-500 mt-2">
-            Automatically apply to jobs with AI matching
-          </p>
+      {/* Fallback UI - Processing results exist but are incomplete/invalid */}
+      {aiApplyManager.processingResults && (!aiApplyManager.processingResults.extractedText || aiApplyManager.processingResults.extractedText.length === 0) && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="text-center">
+            <div className="text-yellow-500 text-4xl mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing Incomplete</h3>
+            <p className="text-gray-600 mb-4">
+              The resume processing didn't complete successfully. Please try parsing the PDF again.
+            </p>
+            <button
+              onClick={() => aiApplyManager.processResume(unifiedResumeManager.activeResume?.id || '')}
+              disabled={aiApplyManager.processing}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {aiApplyManager.processing ? 'Processing...' : 'Re-parse PDF'}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Development Debug Info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-6 p-4 bg-gray-100 rounded">
-          <h3 className="font-semibold mb-2">Debug Information</h3>
-          <div className="text-xs space-y-1">
-            <p>Current user: {currentUser?.email}</p>
-            <p>Active resume: {aiApplyManager.activeResume ? 'Yes' : 'No'}</p>
-            <p>Resumes count: {aiApplyManager.resumes.length}</p>
-            <p>Processing results: {aiApplyManager.processingResults ? 'Yes' : 'No'}</p>
-            <p>Status: {aiApplyManager.status}</p>
-            <p>Uploading: {aiApplyManager.uploading ? 'Yes' : 'No'}</p>
-            <p>Processing: {aiApplyManager.processing ? 'Yes' : 'No'}</p>
-            <p>Screenshot available: {(aiApplyManager.processingResults?.screenshotPaths?.length ?? 0) > 0 ? 'Yes' : 'No'}</p>
-            <p>Aesthetic score: N/A (using mock data)</p>
+      {/* Resume Intelligence - Only show after processing is complete with valid text */}
+      {aiApplyManager.processingResults && aiApplyManager.processingResults.extractedText && aiApplyManager.processingResults.extractedText.length > 0 && (
+        <ResumeIntelligenceCard
+          resumeText={aiApplyManager.processingResults.extractedText || ''}
+          resumeId={unifiedResumeManager.activeResume?.id}
+          onIntelligenceApplied={(intelligence) => {
+            console.log('🎉 Resume intelligence applied successfully!');
+            setResumeIntelligence(intelligence);
+            // Refresh user data to show updated profile/preferences
+            // This will trigger a reload of user context
+          }}
+        />
+      )}
+
+      {/* Job Selection - Show after resume intelligence is available */}
+      {resumeIntelligence && (
+        <JobSelection
+          jobs={[
+            {
+              id: 'job-1',
+              title: 'Senior Frontend Developer',
+              company: 'TechCorp India',
+              location: 'Bengaluru, Karnataka',
+              description: 'Looking for experienced React developer with TypeScript skills...',
+              keywords: ['React', 'TypeScript', 'Node.js'],
+              responsibilities: ['Develop responsive web applications', 'Collaborate with cross-functional teams'],
+              requirements: ['5+ years experience', 'React expertise'],
+              matchScore: 85,
+              personalizedScore: 90,
+              salary: '₹18L - ₹28L'
+            },
+            {
+              id: 'job-2',
+              title: 'Full Stack Engineer',
+              company: 'StartupXYZ',
+              location: 'Mumbai, Maharashtra',
+              description: 'Seeking full stack developer with Node.js and React experience...',
+              keywords: ['Node.js', 'React', 'MongoDB'],
+              responsibilities: ['Build full-stack applications', 'Design system architecture'],
+              requirements: ['Full-stack experience', 'Cloud knowledge'],
+              matchScore: 78,
+              personalizedScore: 82,
+              salary: '₹15L - ₹25L'
+            }
+          ]}
+          selectedJob={selectedJob}
+          onJobSelect={setSelectedJob}
+        />
+      )}
+
+      {/* Cover Letter Generator - Show after job selection */}
+      {resumeIntelligence && selectedJob && (
+        <CoverLetterCard
+          resumeIntelligence={resumeIntelligence}
+          selectedJob={selectedJob}
+          ollamaBaseUrl="http://localhost:9000"
+          extractedText={aiApplyManager.processingResults?.extractedText || ''}
+        />
+      )}
+
+      {/* AI Analysis Section - Only show after processing is complete with valid data */}
+      {aiApplyManager.processingResults && aiApplyManager.processingResults.extractedText && aiApplyManager.processingResults.extractedText.length > 0 && (
+        <div className="space-y-8">
+          {/* Analyze Button - Only show if analysis hasn't been completed for this resume */}
+          {(!analysisCompleted || analysisResumeId !== aiApplyManager.activeResume?.id) && (
+            <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Ready to Analyze Your Resume</h3>
+              <p className="text-gray-600 mb-6">
+                Get comprehensive AI-powered insights using both visual formatting and extracted content analysis
+              </p>
+              <button
+                onClick={handleAnalyzeResume}
+                disabled={isAnalyzing}
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Analyzing Resume with AI...
+                  </>
+                ) : (
+                  <>
+                    <SparklesIcon className="w-5 h-5 mr-2" />
+                    Start Comprehensive Analysis
+                  </>
+                )}
+              </button>
+              <p className="mt-3 text-sm text-gray-500">
+                Uses advanced AI to analyze both visual layout and text content for deeper insights
+              </p>
+              {error && (
+                <div className="mt-4 text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* AI Analysis Results - Only show after analysis is completed for current resume */}
+          {analysisCompleted && analysisResumeId === unifiedResumeManager.activeResume?.id && aiAnalysis && (
+            <>
+            {/* Aesthetic Score */}
+            {aiAnalysis?.aesthetic && (
+            <AestheticScoreCard
+              score={aiAnalysis.aesthetic.score}
+              strengths={aiAnalysis.aesthetic.strengths}
+              improvements={aiAnalysis.aesthetic.improvements}
+              assessment={aiAnalysis.aesthetic.assessment}
+            />
+          )}
+
+          {/* Skills */}
+          {aiAnalysis?.skills && (
+            <SkillsCard
+              skills={aiAnalysis.skills}
+            />
+          )}
+
+          {/* Recommendations */}
+          {aiAnalysis?.recommendations && (
+            (aiAnalysis.recommendations.recommendations?.length > 0 || 
+             aiAnalysis.recommendations.strengths?.length > 0 || 
+             aiAnalysis.recommendations.improvements?.length > 0) && (
+              <RecommendationsCard
+                recommendations={aiAnalysis.recommendations.recommendations || []}
+                strengths={aiAnalysis.recommendations.strengths || []}
+                improvements={aiAnalysis.recommendations.improvements || []}
+              />
+            )
+          )}
+            </>
+          )}
+        </div>
+      )}
+
+{/* Development Debug Info */}
+{process.env.NODE_ENV === 'development' && (
+<div className="mt-6 p-4 bg-gray-100 rounded-lg">
+<h3 className="font-semibold mb-3 text-lg">🔍 Unified Resume Debugger</h3>
+          
+{/* User Info */}
+<div className="mb-4 p-3 bg-white rounded">
+<h4 className="font-medium mb-2 text-sm">👤 User Info</h4>
+<div className="text-xs space-y-1 font-mono">
+<p>Email: {currentUser?.email || 'Not logged in'}</p>
+<p>Loading: {currentUser ? 'No' : 'Yes'}</p>
+</div>
+</div>
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">👤 User Info</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p>Email: {currentUser?.email || 'Not logged in'}</p>
+              <p>Loading: {currentUser ? 'No' : 'Yes'}</p>
+            </div>
+          </div>
+
+          {/* Unified Resume Manager State */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">🔄 Unified Resume Manager</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p>Resumes count: {unifiedResumeManager.resumes.length}</p>
+              <p>Has resume: {unifiedResumeManager.hasResume ? 'Yes' : 'No'}</p>
+              <p>Resume uploaded: {unifiedResumeManager.resumeUploaded ? 'Yes' : 'No'}</p>
+              <p>Can upload more: {unifiedResumeManager.canUploadMore ? 'Yes' : 'No'}</p>
+              <p>Loading: {unifiedResumeManager.loading ? 'Yes' : 'No'}</p>
+              <p>Uploading: {unifiedResumeManager.uploading ? 'Yes' : 'No'}</p>
+              <p>Active resume ID: {unifiedResumeManager.activeResume?.id || 'None'}</p>
+              <p>Active resume name: {unifiedResumeManager.activeResume?.original_filename || 'None'}</p>
+            </div>
+          </div>
+
+          {/* Base AI Apply Manager State */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">⚙️ Base AI Apply Manager</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p>Resumes count: {aiApplyManager.resumes.length}</p>
+              <p>Loading: {aiApplyManager.loading ? 'Yes' : 'No'}</p>
+              <p>Uploading: {aiApplyManager.uploading ? 'Yes' : 'No'}</p>
+              <p>Processing: {aiApplyManager.processing ? 'Yes' : 'No'}</p>
+              <p>Status: {aiApplyManager.status}</p>
+              <p>Error: {aiApplyManager.error || 'None'}</p>
+              <p>Active resume ID: {aiApplyManager.activeResume?.id || 'None'}</p>
+              <p>Active resume name: {aiApplyManager.activeResume?.original_filename || 'None'}</p>
+            </div>
+          </div>
+
+          {/* Processing Results */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">📄 Processing Results</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p>Has results: {aiApplyManager.processingResults ? 'Yes' : 'No'}</p>
+              <p>Extracted text length: {aiApplyManager.processingResults?.extractedText?.length || 0}</p>
+              <p>Text length: {aiApplyManager.processingResults?.textLength || 0}</p>
+              <p>Num pages: {aiApplyManager.processingResults?.numPages || 0}</p>
+              <p>Screenshots: {aiApplyManager.processingResults?.screenshotPaths?.length || 0}</p>
+              <p>PDF Title: {aiApplyManager.processingResults?.pdfTitle || 'None'}</p>
+              <p>PDF Author: {aiApplyManager.processingResults?.pdfAuthor || 'None'}</p>
+              <p>Processed at: {aiApplyManager.processingResults?.processedAt || 'None'}</p>
+            </div>
+          </div>
+
+          {/* Resume List */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">📋 Resume List Details</h4>
+            <div className="text-xs space-y-1 font-mono">
+              {unifiedResumeManager.resumes.length === 0 ? (
+                <p>No resumes found</p>
+              ) : (
+                unifiedResumeManager.resumes.map((resume, index) => (
+                  <div key={resume.id} className="p-2 border rounded mb-1">
+                    <p className="font-semibold">Resume {index + 1}:</p>
+                    <p>ID: {resume.id}</p>
+                    <p>Name: {resume.original_filename}</p>
+                    <p>Active: {resume.is_active ? 'Yes' : 'No'}</p>
+                    <p>Status: {resume.processingStatus || 'Unknown'}</p>
+                    <p>Size: {resume.file_size} bytes</p>
+                    <p>Uploaded: {resume.upload_date}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* OCR Test Component */}
+          <OCRTestComponent documentId={unifiedResumeManager.activeResume?.id} />
+
+          {/* Action Buttons */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">🧪 Debug Actions</h4>
+            <div className="flex gap-2 flex-wrap">
+              <button 
+                onClick={() => {
+                  console.log('🔍 Unified Manager State:', unifiedResumeManager);
+                  console.log('🔍 Base Manager State:', aiApplyManager);
+                  console.log('🔍 Current User:', currentUser);
+                }}
+                className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+              >
+                Log State to Console
+              </button>
+              <button 
+                onClick={() => {
+                  aiApplyManager.loadResumes?.();
+                }}
+                className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+              >
+                Reload Resumes
+              </button>
+              <button 
+                onClick={() => {
+                  window.location.reload();
+                }}
+                className="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600"
+              >
+                Hard Refresh Page
+              </button>
+            </div>
+          </div>
+
+          {/* State Consistency Check */}
+          <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
+            <h4 className="font-medium mb-2 text-sm">⚠️ State Consistency Check</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p className={unifiedResumeManager.resumes.length === aiApplyManager.resumes.length ? 'text-green-600' : 'text-red-600'}>
+                Resume counts match: {unifiedResumeManager.resumes.length === aiApplyManager.resumes.length ? '✅' : '❌'}
+              </p>
+              <p className={unifiedResumeManager.activeResume?.id === aiApplyManager.activeResume?.id ? 'text-green-600' : 'text-red-600'}>
+                Active resumes match: {unifiedResumeManager.activeResume?.id === aiApplyManager.activeResume?.id ? '✅' : '❌'}
+              </p>
+              <p className={unifiedResumeManager.hasResume === (unifiedResumeManager.resumes.length > 0) ? 'text-green-600' : 'text-red-600'}>
+                hasResume consistent: {unifiedResumeManager.hasResume === (unifiedResumeManager.resumes.length > 0) ? '✅' : '❌'}
+              </p>
+              <p className={unifiedResumeManager.resumeUploaded === (unifiedResumeManager.resumes.length > 0) ? 'text-green-600' : 'text-red-600'}>
+                resumeUploaded consistent: {unifiedResumeManager.resumeUploaded === (unifiedResumeManager.resumes.length > 0) ? '✅' : '❌'}
+              </p>
+            </div>
           </div>
         </div>
       )}

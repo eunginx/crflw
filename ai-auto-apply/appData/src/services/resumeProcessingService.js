@@ -148,22 +148,49 @@ class ResumeProcessingService {
       // Read PDF file
       const dataBuffer = await fs.readFile(filePath);
       
+      console.log(`🖼️ Generating screenshot for document ${documentId}, PDF size: ${dataBuffer.length} bytes`);
+      
       // Generate screenshot using pdf-parse v2.4.5 API
       const parser = new PDFParse({ data: dataBuffer });
-      const screenshotResult = await parser.getScreenshot({ scale: 1.5 });
+      const screenshotResult = await parser.getScreenshot({ 
+        scale: 1.5,
+        imageDataUrl: false, // Only get buffer, no base64
+        imageBuffer: true    // Ensure we get binary buffer
+      });
       await parser.destroy();
 
-      // Save the first page screenshot
-      await fs.writeFile(screenshotPath, screenshotResult.pages[0].data);
+      // Verify we have the screenshot data
+      if (!screenshotResult.pages || screenshotResult.pages.length === 0) {
+        throw new Error('No pages returned from screenshot generation');
+      }
+
+      // Save the first page screenshot - result.pages[0].data should be a Buffer
+      const imageBuffer = screenshotResult.pages[0].data;
       
-      console.log(`Screenshot generated at: ${screenshotPath}`);
+      if (!Buffer.isBuffer(imageBuffer)) {
+        console.error('❌ Screenshot data is not a buffer:', typeof imageBuffer);
+        throw new Error('Screenshot data is not a buffer');
+      }
+      
+      await fs.writeFile(screenshotPath, imageBuffer);
+      
+      console.log(`✅ Screenshot generated successfully at: ${screenshotPath} (${imageBuffer.length} bytes)`);
       return screenshotPath;
     } catch (error) {
-      console.error('Error generating screenshot:', error);
+      console.error('❌ Error generating screenshot:', error);
+      console.error('🔧 Screenshot error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
       // Fallback to placeholder if screenshot generation fails
       const screenshotFileName = `resume_${documentId}_page1.png`;
       const screenshotPath = path.join(this.assetsDir, 'screenshots', screenshotFileName);
-      await fs.writeFile(screenshotPath, 'placeholder-screenshot-data');
+      // Create a minimal 1x1 transparent PNG as placeholder
+      const placeholderBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77yQAAAABJRU5ErkJggg==', 'base64');
+      await fs.writeFile(screenshotPath, placeholderBuffer);
+      console.log(`🔄 Using placeholder screenshot at: ${screenshotPath}`);
       return screenshotPath;
     }
   }

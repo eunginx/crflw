@@ -907,7 +907,7 @@ async function processQueue() {
               results.info?.Author || '',
               results.info?.Creator || '',
               results.info?.Producer || '',
-              results.previewImageBase64 || null
+              results.screenshotPath || null
             ]
           );
 

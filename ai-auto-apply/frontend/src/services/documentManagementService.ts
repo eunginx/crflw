@@ -7,7 +7,7 @@ export interface Document {
   file_type: string;
   document_type: string;
   is_active: boolean;
-  processing_status: string;
+  processingStatus: string;
   uploaded_at: string;
   processed_at?: string;
   text_length?: number;
@@ -34,7 +34,7 @@ export interface DocumentProcessingResults {
   cliOutput?: any;
   processingTimeMs?: number;
   assetsCount?: number;
-  screenshotPath?: string;
+  screenshotPaths?: string[]; // Array of screenshot paths for all pages
   textFilePath?: string;
 }
 

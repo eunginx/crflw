@@ -326,20 +326,27 @@ router.post('/cli/tables', async (req, res) => {
 router.get('/screenshots/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
-    console.log('🖼️ Screenshot request for filename:', filename);
+    console.log('🖼️ Backend DEBUG - Screenshot request received:', { 
+      filename, 
+      fullUrl: req.originalUrl,
+      headers: req.headers
+    });
     
-    const screenshotsDir = path.join(__dirname, '../../uploads/screenshots');
+    const screenshotsDir = path.join(__dirname, '../../assets/screenshots');
     const filePath = path.join(screenshotsDir, filename);
     
-    console.log('🖼️ Screenshots directory:', screenshotsDir);
-    console.log('🖼️ Full file path:', filePath);
+    console.log('🖼️ Backend DEBUG - Path resolution:', { 
+      screenshotsDir, 
+      filePath,
+      filename 
+    });
 
     // Check if file exists
     try {
       await fs.access(filePath);
-      console.log('✅ Screenshot file found');
+      console.log('🖼️ Backend DEBUG - Screenshot file found and accessible');
     } catch (accessError) {
-      console.error('❌ Screenshot file not found:', accessError);
+      console.error('🖼️ Backend DEBUG - Screenshot file not found:', accessError);
       return res.status(404).json({
         error: 'Screenshot not found',
         filename,
@@ -347,10 +354,20 @@ router.get('/screenshots/:filename', async (req, res) => {
       });
     }
 
+    // Get file stats for debugging
+    const stats = await fs.stat(filePath);
+    console.log('🖼️ Backend DEBUG - File stats:', {
+      size: stats.size,
+      created: stats.birthtime,
+      modified: stats.mtime,
+      isFile: stats.isFile()
+    });
+
     // Send the file
+    console.log('🖼️ Backend DEBUG - Sending screenshot file');
     res.sendFile(filePath);
   } catch (error) {
-    console.error('Error serving screenshot:', error);
+    console.error('🖼️ Backend DEBUG - Error serving screenshot:', error);
     res.status(500).json({
       error: 'Failed to serve screenshot',
       details: error.message

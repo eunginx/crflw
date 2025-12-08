@@ -198,16 +198,35 @@ class AIApplyService {
   /**
    * Set a resume as active
    */
-  async setActiveResume(resumeId: string, userId: string): Promise<{ success: boolean; message: string }> {
+  async setActiveResume(resumeId: string, userEmail: string): Promise<{ success: boolean; message: string }> {
     try {
+      console.log('🔧 setActiveResume API Call:', { resumeId, userEmail });
       const response = await axios.post(
         `${API_BASE_URL}/api/ai-apply/resumes/${resumeId}/set-active`,
-        { userId }
+        { userEmail },
+        { timeout: 15000 } // 15 second timeout
       );
-
+      console.log('✅ setActiveResume API Response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error setting active resume:', error);
+      console.error('❌ setActiveResume Error:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('🔍 SetActive error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          code: error.code,
+          message: error.message,
+          isTimeout: error.code === 'ECONNABORTED',
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            data: error.config?.data
+          }
+        });
+      } else {
+        console.error('🔍 Non-Axios error:', error);
+      }
       throw new Error(
         axios.isAxiosError(error)
           ? error.response?.data?.error || 'Failed to set active resume'
@@ -269,7 +288,10 @@ class AIApplyService {
       
       const response = await axios.delete(
         `${API_BASE_URL}/api/ai-apply/resumes/${resumeId}`,
-        { data: { userEmail, hardDelete: true } } // Always hard delete
+        { 
+          data: { userEmail, hardDelete: true }, // Always hard delete
+          timeout: 60000 // 60 second timeout to prevent hanging during debugging
+        }
       );
       
       console.log('🗑️ Resume hard delete successful:', response.data);
@@ -280,7 +302,9 @@ class AIApplyService {
         console.error('🗑️ Delete error details:', {
           status: error.response?.status,
           statusText: error.response?.statusText,
-          data: error.response?.data
+          data: error.response?.data,
+          code: error.code,
+          message: error.message
         });
       }
       throw new Error(
@@ -449,44 +473,109 @@ class AIApplyService {
   }
 
   /**
-   * Start AI analysis for a processed resume
+   * Start enhanced AI analysis for a processed resume using pre-extracted text
    */
   async startAIAnalysis(documentId: string): Promise<any> {
+    console.log('🧠 === AI ANALYSIS SERVICE DEBUG START ===');
+    console.log('🧠 startAIAnalysis called with documentId:', documentId);
+    console.log('🧠 API_BASE_URL:', API_BASE_URL);
+    console.log('🧠 Full endpoint URL:', `${API_BASE_URL}/api/ai/analyze-resume`);
+    
     try {
-      // First get the resume processing results to extract the text
-      const resultsResponse = await axios.get(
-        `${API_BASE_URL}/api/ai-apply/resumes/${documentId}/results`
+      console.log('🧠 Starting enhanced comprehensive AI analysis for document:', documentId);
+      
+      // Step 1: Ensure text extraction is complete
+      console.log('🧠 Step 1: Checking if text extraction is complete...');
+      const textResultsResponse = await axios.get(
+        `${API_BASE_URL}/api/pdf-processing/${documentId}/text-results`
+      );
+      
+      if (!textResultsResponse.data?.success || !textResultsResponse.data?.data?.extracted_text) {
+        console.log('🧠 Text not extracted yet, starting text extraction...');
+        
+        // Extract text first
+        const extractionResponse = await axios.post(
+          `${API_BASE_URL}/api/pdf-processing/extract-text`,
+          { documentId },
+          {
+            timeout: 60000, // 1 minute timeout for text extraction
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        console.log('🧠 Text extraction completed:', extractionResponse.data);
+      } else {
+        console.log('🧠 Text extraction already complete, using existing results');
+      }
+      
+      // Step 2: Call AI analysis with pre-extracted text
+      console.log('🧠 Step 2: Starting AI analysis...');
+      const response = await axios.post(
+        `${API_BASE_URL}/api/ai/analyze-resume`,
+        { documentId },
+        {
+          timeout: 120000, // 2 minute timeout for AI analysis
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
 
-      const processingResults = resultsResponse.data?.data;
-      
-      if (!processingResults) {
-        throw new Error('No resume processing results found. Please ensure the resume has been processed first.');
+      console.log('🧠 Raw AI analysis response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data
+      });
+
+      if (!response.data) {
+        console.log('🧠 ERROR: No analysis data received from AI service');
+        throw new Error('No analysis data received from AI service');
       }
 
-      if (!processingResults.extracted_text) {
-        throw new Error('No resume text found for analysis. Please ensure the resume has been processed successfully.');
-      }
-
-      // Run comprehensive AI analysis
-      const [aestheticResult, skillsResult, recommendationsResult] = await Promise.all([
-        this.analyzeAestheticScore(processingResults.extracted_text, JSON.stringify(processingResults)),
-        this.analyzeSkills(processingResults.extracted_text),
-        this.generateRecommendations(processingResults.extracted_text, [], {})
-      ]);
-
-      return {
-        aesthetic: aestheticResult,
-        skills: skillsResult,
-        recommendations: recommendationsResult
-      };
+      console.log('🧠 Enhanced AI analysis completed successfully');
+      console.log('🧠 Final analysis results:', response.data);
+      console.log('🧠 === AI ANALYSIS SERVICE DEBUG END ===');
+      return response.data;
     } catch (error) {
-      console.error('Failed to start AI analysis:', error);
+      console.error('🧠 === AI ANALYSIS SERVICE ERROR ===');
+      console.error('🧠 Failed to start enhanced AI analysis:', error);
+      
       if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.error || error.message || 'Failed to start AI analysis';
+        console.error('🧠 Axios Error Details:');
+        console.error('🧠 Message:', error.message);
+        console.error('🧠 Code:', error.code);
+        console.error('🧠 Status:', error.response?.status);
+        console.error('🧠 StatusText:', error.response?.statusText);
+        console.error('🧠 Response Data:', error.response?.data);
+        console.error('🧠 Request Config:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data,
+          headers: error.config?.headers,
+          timeout: error.config?.timeout
+        });
+        
+        // Check for specific error types
+        if (error.code === 'ECONNREFUSED') {
+          console.error('🧠 CONNECTION REFUSED: Backend service may be down');
+        } else if (error.code === 'ETIMEDOUT') {
+          console.error('🧠 TIMEOUT: AI analysis took too long');
+        } else if (error.response?.status === 404) {
+          console.error('🧠 NOT FOUND: Analysis endpoint not found');
+        } else if (error.response?.status === 500) {
+          console.error('🧠 SERVER ERROR: Backend analysis failed');
+        }
+        
+        const errorMessage = error.response?.data?.error || error.message || 'Failed to start enhanced AI analysis';
+        console.error('🧠 Final error message:', errorMessage);
         throw new Error(errorMessage);
       }
-      throw new Error('Network error while starting AI analysis');
+      
+      console.error('🧠 Non-Axios error:', error);
+      throw new Error('Network error while starting enhanced AI analysis');
     }
   }
 

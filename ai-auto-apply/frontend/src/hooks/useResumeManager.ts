@@ -98,7 +98,7 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
       // Convert ResumeData to ResumeDocument format
       const convertedResumes = userResumes.data.map(resume => ({
         ...resume,
-        processing_status: resume.processing_status as "completed" | "pending" | "error" | "processing",
+        processingStatus: resume.processingStatus as "completed" | "pending" | "error" | "processing",
         filename: resume.filename,
         file_size: resume.file_size
       }));
@@ -117,7 +117,7 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
           // Convert ResumeData to ResumeDocument format
           const convertedActiveResume = {
             ...activeResumeResponse.data,
-            processing_status: activeResumeResponse.data.processing_status as "completed" | "pending" | "error" | "processing",
+            processingStatus: activeResumeResponse.data.processingStatus as "completed" | "pending" | "error" | "processing",
             filename: activeResumeResponse.data.filename,
             file_size: activeResumeResponse.data.file_size
           };
@@ -129,27 +129,27 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
           if (processingResults.data) {
             const results = processingResults.data;
             setProcessedResume({
-              text: results.extracted_text || '',
-              textLength: results.text_length || 0,
+              text: results.extractedText || '',
+              textLength: results.textLength || 0,
               filename: activeResumeResponse.data.original_filename,
-              processedAt: results.processed_at || '',
-              screenshotPath: results.screenshot_path,
-              textFilePath: results.text_file_path,
+              processedAt: results.processedAt || '',
+              screenshotPaths: results.screenshotPaths || [],
+              textFilePath: results.textFilePath || undefined,
               metadata: {
-                totalPages: results.num_pages || 0,
-                title: results.pdf_title || undefined,
-                author: results.pdf_author || undefined,
-                creator: results.pdf_creator || undefined,
-                producer: results.pdf_producer || undefined
+                totalPages: results.numPages || 0,
+                title: results.pdfTitle || undefined,
+                author: results.pdfAuthor || undefined,
+                creator: results.pdfCreator || undefined,
+                producer: results.pdfProducer || undefined
               }
             });
 
             if (process.env.NODE_ENV === 'development') {
-              console.log('📄 Processed resume set with screenshot path:', results.screenshot_path);
+              console.log('📄 Processed resume set with screenshot paths:', results.screenshotPaths);
             }
 
             // Load screenshot if available
-            if (results.screenshot_path) {
+            if (results.screenshotPaths && results.screenshotPaths.length > 0) {
               await loadScreenshot();
             }
           } else {
@@ -207,7 +207,7 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
       setUnifiedResult(unified);
 
       // Load screenshot if available
-      if (processingResults?.screenshotPath) {
+      if (processingResults?.screenshotPaths && processingResults.screenshotPaths.length > 0) {
         await loadScreenshot();
       }
     } catch (error) {
@@ -322,23 +322,23 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
     }
   }, [userId, resumes]);
 
-  // Delete a resume - simplified like the original
+  // Delete a resume - always uses hard delete
   const deleteResume = useCallback(async (documentId: string) => {
     const document = resumes.find(d => d.id === documentId);
     if (!document) return;
 
-    const confirmed = window.confirm(`Are you sure you want to delete "${document.original_filename}"? This will permanently delete the resume file and all associated analysis data.`);
+    const confirmed = window.confirm(`⚠️ HARD DELETE: This will permanently delete "${document.original_filename}" and all associated data from the system, including: Document Information, PDF Metadata, Resume Preview, and Extracted Text. This action cannot be undone. Are you sure?`);
     if (!confirmed) return;
 
     try {
-      console.log('Deleting document:', document.original_filename);
+      console.log('🔥 HARD DELETING document:', document.original_filename);
       
       // Import aiApplyService for resume deletion
       const { aiApplyService } = await import('../services/aiApplyService');
       
       await aiApplyService.deleteResume(documentId, userId || '');
       
-      // Update local state
+      // Update local state - clear all UI components
       setResumes(resumes.filter(d => d.id !== documentId));
       if (activeResume?.id === documentId) {
         setActiveResume(null);
@@ -346,11 +346,12 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         setParsedResume(null);
         setScreenshotUrl(null);
         setUnifiedResult(null);
+        setAnalysis(null);
       }
-      console.log('Document deleted successfully');
-      alert('Resume and all associated data deleted successfully!');
+      console.log('🔥 Document and all UI components cleared successfully');
+      alert('Resume and all associated data permanently deleted from system!');
     } catch (error) {
-      console.error('Error deleting document:', error);
+      console.error('🔥 Error hard deleting document:', error);
       alert('Failed to delete document: ' + (error as Error).message);
       throw error;
     }
@@ -396,7 +397,7 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
           textLength: processingResults.textLength,
           filename: activeResume?.original_filename || 'Resume',
           processedAt: processingResults.processedAt,
-          screenshotPath: processingResults.screenshotPath,
+          screenshotPaths: processingResults.screenshotPaths || [],
           textFilePath: processingResults.textFilePath,
           metadata: {
             totalPages: processingResults.pdfTotalPages || 0,
@@ -411,8 +412,8 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
         setProcessedResume(processedData);
 
         // Load screenshot if available
-        if (processingResults.screenshotPath) {
-          const screenshotUrl = `http://localhost:8000/api/documents${processingResults.screenshotPath}`;
+        if (processingResults.screenshotPaths && processingResults.screenshotPaths.length > 0) {
+          const screenshotUrl = `http://localhost:8000/api/documents/screenshots/${processingResults.screenshotPaths[0].split('/').pop()}`;
           console.log('🖼️ Setting screenshot URL:', screenshotUrl);
           setScreenshotUrl(screenshotUrl);
         } else {
@@ -496,16 +497,17 @@ export const useResumeManager = (userId?: string): UseResumeManagerReturn => {
     if (!userId || !mountedRef.current) return;
     
     try {
-      // Only processedResume has screenshotPath, not activeResume
-      if (!processedResume?.screenshotPath) {
+      // Only processedResume has screenshotPaths, not activeResume
+      if (!processedResume?.screenshotPaths || processedResume.screenshotPaths.length === 0) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🖼️ No screenshot path available in processed resume');
+          console.log('🖼️ No screenshot paths available in processed resume');
         }
         return;
       }
       
-      // Extract filename from the screenshot path
-      const filename = processedResume.screenshotPath.split('/').pop();
+      // Use the first screenshot for the legacy screenshotUrl
+      const firstScreenshotPath = processedResume.screenshotPaths[0];
+      const filename = firstScreenshotPath.split('/').pop();
       const screenshotUrl = `http://localhost:8000/api/documents/screenshots/${filename}`;
       
       if (process.env.NODE_ENV === 'development') {

@@ -5,7 +5,7 @@ interface ResumeListProps {
   resumes: ResumeDocument[];
   activeResume: ResumeDocument | null;
   onSetActive: (resumeId: string) => Promise<void>;
-  onDelete: (resumeId: string) => Promise<void>;
+  onDelete: (resumeId: string, hardDelete?: boolean) => Promise<void>;
   onProcess: (resumeId: string) => Promise<void>;
   onAIAnalysis: (resumeId: string) => Promise<void>;
   loading: boolean;
@@ -88,17 +88,17 @@ const ResumeList: React.FC<ResumeListProps> = ({
               
               <div className="flex items-center gap-2">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  resume.processing_status === 'completed' 
+                  resume.processingStatus === 'completed' 
                     ? 'bg-green-100 text-green-800'
-                    : resume.processing_status === 'processing'
+                    : resume.processingStatus === 'processing'
                     ? 'bg-yellow-100 text-yellow-800'
-                    : resume.processing_status === 'error'
+                    : resume.processingStatus === 'error'
                     ? 'bg-red-100 text-red-800'
                     : 'bg-gray-100 text-gray-800'
                 }`}>
-                  {resume.processing_status === 'completed' ? 'Processed' :
-                   resume.processing_status === 'processing' ? 'Processing' :
-                   resume.processing_status === 'error' ? 'Error' : 'Pending'}
+                  {resume.processingStatus === 'completed' ? 'Processed' :
+                   resume.processingStatus === 'processing' ? 'Processing' :
+                   resume.processingStatus === 'error' ? 'Error' : 'Pending'}
                 </span>
                 
                 {activeResume?.id === resume.id && (
@@ -120,7 +120,7 @@ const ResumeList: React.FC<ResumeListProps> = ({
                 </button>
               )}
               
-              {activeResume?.id === resume.id && resume.processing_status !== 'processing' && (
+              {activeResume?.id === resume.id && resume.processingStatus !== 'processing' && (
                 <>
                   <button
                     onClick={() => onProcess(resume.id)}
@@ -130,7 +130,7 @@ const ResumeList: React.FC<ResumeListProps> = ({
                     {processing ? 'Processing...' : 'Parse PDF'}
                   </button>
                   
-                  {resume.processing_status === 'completed' && (
+                  {resume.processingStatus === 'completed' && (
                     <button
                       onClick={() => onAIAnalysis(resume.id)}
                       disabled={processing}
@@ -142,13 +142,19 @@ const ResumeList: React.FC<ResumeListProps> = ({
                 </>
               )}
               
+              <div className="relative">
               <button
                 onClick={() => handleDelete(resume.id)}
                 disabled={loading || processing || deletingId === resume.id}
-                className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                title="Permanently delete resume and all associated data"
               >
                 {deletingId === resume.id ? 'Deleting...' : 'Delete'}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
+            </div>
             </div>
           </div>
         </div>

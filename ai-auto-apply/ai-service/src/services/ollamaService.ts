@@ -217,12 +217,19 @@ export async function generateCoverLetter(
   const prompt = `Write a concise, high-impact professional cover letter (max 250 words).
 
 Requirements:
-- Use first-person voice.
-- Highlight alignment between resume and job description.
-- Include 2–3 quantifiable strengths from the resume.
-- Avoid generic filler sentences.
+- Use first-person voice
+- Highlight alignment between resume and job description
+- Include 2–3 quantifiable strengths from the resume
+- Avoid generic filler sentences
 
-Return ONLY the cover letter text—no JSON, no brackets.
+CRITICAL INSTRUCTIONS:
+- DO NOT return JSON format
+- DO NOT use {"coverLetter": "..."} structure
+- DO NOT include any brackets or JSON keys
+- Return ONLY the plain text cover letter content
+- Start directly with "Dear Hiring Team," or similar salutation
+- End with signature line
+- No metadata, no JSON wrapper, no object structure
 
 Company: ${companyName || "Unknown"}
 Role: ${roleTitle || "Unknown"}
@@ -231,9 +238,23 @@ Resume:
 ${resumeText}
 
 Job Description:
-${jobDescription}`;
+${jobDescription}
 
-  return callModel(prompt);
+EXAMPLE OF CORRECT FORMAT:
+Dear Hiring Team,
+
+I am excited to apply for the Senior Frontend Developer position at TechCorp India...
+
+[Your cover letter content here...]
+
+Thank you for your consideration. I look forward to discussing how my experience can contribute to your team's success.
+
+Sincerely,
+[Your Name]
+
+Now write the cover letter in this exact format - plain text only.`;
+
+  return callModel(prompt, 'You are a professional cover letter writer. Always respond with plain text cover letters, never JSON.');
 }
 
 export async function matchJobs(payload: JobMatchRequest) {
@@ -449,7 +470,7 @@ Full Resume Text:
 ${resumeText}`;
 
     const raw = await callModel(prompt);
-    const result = parseJson<AIRecommendationsResult>(raw, fallback);
+    const result = parseJson(raw, fallback);
     
     console.log('💡 AI RECOMMENDATIONS RESULT');
     console.log('Parsed Result:', JSON.stringify(result, null, 2));
@@ -461,3 +482,6 @@ ${resumeText}`;
     return fallback;
   }
 }
+
+// Export callModel for use in other routes
+export { callModel };

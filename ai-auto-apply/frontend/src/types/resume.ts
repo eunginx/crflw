@@ -4,7 +4,7 @@ export interface ResumeDocument {
   original_filename: string;
   upload_date: string; // Changed from uploaded_at to match API response
   is_active: boolean;
-  processing_status?: "completed" | "pending" | "error" | "processing";
+  processingStatus?: "completed" | "pending" | "error" | "processing";
   file_path?: string;
   file_size?: number;
   mime_type?: string;
@@ -76,7 +76,7 @@ export interface ProcessedResume {
   textLength: number;
   filename: string;
   processedAt: string;
-  screenshotPath?: string;
+  screenshotPaths?: string[]; // Array of screenshot paths for all pages
   textFilePath?: string;
   metadata?: PdfMetadata;
   stats?: ResumeStats;
