@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { JobProvider } from './context/JobContext';
 import { JobStatusProvider } from './context/JobStatusContext';
 import { OnboardingProvider } from './context/OnboardingContext';
+import { UserProvider } from './context/UserContext';
 // Email-based providers
 import { EmailUserProvider, EmailSettingsProvider, EmailApplicationsProvider } from './context';
 // Components and pages
@@ -25,56 +26,46 @@ import AIApplyPage from './pages/AIApplyPage';
 function App() {
   return (
     <AuthProvider>
-      <JobStatusProvider>
-        <OnboardingProvider>
-          <JobProvider>
-            <EmailUserProvider>
-              <EmailApplicationsProvider>
-                <Router
-                  future={{
-                    v7_startTransition: true,
-                    v7_relativeSplatPath: true
-                  }}
-                >
-                  <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/register" element={<RegisterPage />} />
-                    <Route path="/onboarding" element={<OnboardingPage />} />
-                    <Route path="/" element={<Layout />}>
-                      <Route index element={<HomePage />} />
-                      <Route path="jobs" element={<JobsPage />} />
-                      <Route path="applications" element={<ApplicationsPage />} />
-                      <Route path="ai-apply" element={<AIApplyPage />} />
-                      <Route path="profile" element={<ProfilePage />} />
-                      <Route path="settings" element={
-                        <AuthProvider>
-                          <JobStatusProvider>
-                            <JobProvider>
-                              <EmailUserProvider>
-                                <EmailApplicationsProvider>
-                                  <SettingsPage />
-                                </EmailApplicationsProvider>
-                              </EmailUserProvider>
-                            </JobProvider>
-                          </JobStatusProvider>
-                        </AuthProvider>
-                      } />
-                      {/* Email-based routes */}
-                      <Route path="email-settings" element={
-                        <EmailSettingsProvider>
-                          <EmailSettingsPage />
-                        </EmailSettingsProvider>
-                      } />
-                      <Route path="email-test" element={<EmailIntegrationTest />} />
-                      <Route path="*" element={<NotFoundPage />} />
-                    </Route>
-                  </Routes>
-                </Router>
-              </EmailApplicationsProvider>
-            </EmailUserProvider>
-          </JobProvider>
-        </OnboardingProvider>
-      </JobStatusProvider>
+      <UserProvider>
+        <JobStatusProvider>
+          <OnboardingProvider>
+            <JobProvider>
+              <EmailUserProvider>
+                <EmailApplicationsProvider>
+                  <Router
+                    future={{
+                      v7_startTransition: true,
+                      v7_relativeSplatPath: true
+                    }}
+                  >
+                    <Routes>
+                      <Route path="/login" element={<LoginPage />} />
+                      <Route path="/register" element={<RegisterPage />} />
+                      <Route path="/onboarding" element={<OnboardingPage />} />
+                      <Route path="/" element={<Layout />}>
+                        <Route index element={<HomePage />} />
+                        <Route path="jobs" element={<JobsPage />} />
+                        <Route path="applications" element={<ApplicationsPage />} />
+                        <Route path="ai-apply" element={<AIApplyPage />} />
+                        <Route path="profile" element={<ProfilePage />} />
+                        <Route path="settings" element={<SettingsPage />} />
+                        {/* Email-based routes */}
+                        <Route path="email-settings" element={
+                          <EmailSettingsProvider>
+                            <EmailSettingsPage />
+                          </EmailSettingsProvider>
+                        } />
+                        <Route path="email-test" element={<EmailIntegrationTest />} />
+                        <Route path="*" element={<NotFoundPage />} />
+                      </Route>
+                    </Routes>
+                  </Router>
+                </EmailApplicationsProvider>
+              </EmailUserProvider>
+            </JobProvider>
+          </OnboardingProvider>
+        </JobStatusProvider>
+      </UserProvider>
     </AuthProvider>
   );
 }
