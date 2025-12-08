@@ -53,13 +53,36 @@ router.post('/analyze-resume', async (req, res) => {
     const extractedText = textResponse.data.data.extracted_text;
     const screenshotPathsJson = textResponse.data.data.screenshot_path;
 
+    console.log('🧠 DEBUG - Raw response from PDF service:', {
+      hasData: !!textResponse.data,
+      hasDataData: !!textResponse.data?.data,
+      extractedTextLength: extractedText?.length,
+      screenshotPathsJson: screenshotPathsJson,
+      screenshotPathsJsonType: typeof screenshotPathsJson,
+      screenshotPathsJsonLength: screenshotPathsJson?.length,
+      allDataKeys: Object.keys(textResponse.data?.data || {})
+    });
+
     // Parse screenshot paths from JSON string
     let screenshotPaths: string[] = [];
     if (screenshotPathsJson) {
       try {
         screenshotPaths = JSON.parse(screenshotPathsJson);
+        console.log('🧠 Successfully parsed screenshot paths:', screenshotPaths);
       } catch (error) {
         console.warn('Failed to parse screenshot paths:', error);
+        console.warn('Raw value that failed to parse:', screenshotPathsJson);
+      }
+    } else {
+      console.warn('🧠 screenshot_path is null/undefined, checking for alternative fields...');
+      // Check for alternative field names
+      const data = textResponse.data.data;
+      if (data.screenshotPaths) {
+        console.log('🧠 Found screenshotPaths field (camelCase)');
+        screenshotPaths = Array.isArray(data.screenshotPaths) ? data.screenshotPaths : JSON.parse(data.screenshotPaths);
+      } else if (data.screenshot_paths) {
+        console.log('🧠 Found screenshot_paths field (snake_case plural)');
+        screenshotPaths = Array.isArray(data.screenshot_paths) ? data.screenshot_paths : JSON.parse(data.screenshot_paths);
       }
     }
 

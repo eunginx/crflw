@@ -17,7 +17,7 @@ const router = express.Router();
 router.post("/extract-text", async (req, res) => {
   console.log('📄 === PDF TEXT PROCESSING DEBUG START ===');
   console.log('📄 Request body:', req.body);
-  
+
   try {
     const { documentId } = req.body;
 
@@ -37,17 +37,17 @@ router.post("/extract-text", async (req, res) => {
         'SELECT file_path FROM documents WHERE id = $1',
         [documentId]
       );
-      
+
       console.log('📄 Database query result:', {
         rowCount: result.rowCount,
         rows: result.rows
       });
-      
+
       if (result.rows.length === 0) {
         console.log('📄 ERROR: Document not found in database');
         return res.status(404).json({ error: 'Document not found' });
       }
-      
+
       filePath = result.rows[0].file_path;
       console.log('📄 Document file path from database:', filePath);
     } finally {
@@ -58,7 +58,7 @@ router.post("/extract-text", async (req, res) => {
     console.log('📄 Checking if file exists on disk:', filePath);
     const fileExists = fs.existsSync(filePath);
     console.log('📄 File exists on disk:', fileExists);
-    
+
     if (!fileExists) {
       console.log('📄 ERROR: PDF file not found on disk');
       return res.status(400).json({ error: "PDF file not found on disk" });
@@ -69,23 +69,23 @@ router.post("/extract-text", async (req, res) => {
     let extractedText = '';
     let numPages = 1;
     let metadata = {};
-    
+
     try {
       console.log('📄 Attempting basic PDF text extraction...');
       const { PDFParse } = await import('pdf-parse');
       const dataBuffer = fs.readFileSync(filePath);
-      
+
       // Use most basic parsing approach
       const parser = new PDFParse({ data: dataBuffer });
-      
+
       // Only get text - no metadata or screenshots that might trigger DOMMatrix
       const textResult = await parser.getText();
       await parser.destroy();
-      
+
       extractedText = textResult.text || '';
       console.log('📄 Basic text extraction successful');
       console.log('📄 Extracted text length:', extractedText.length);
-      
+
       // Try to get basic metadata if possible
       try {
         const parser2 = new PDFParse({ data: dataBuffer });
@@ -97,12 +97,12 @@ router.post("/extract-text", async (req, res) => {
       } catch (metadataError) {
         console.warn('📄 Metadata extraction failed, using defaults:', metadataError.message);
       }
-      
+
     } catch (extractionError) {
       console.error('📄 ERROR: PDF text extraction failed:', extractionError);
-      return res.status(500).json({ 
-        error: "PDF text extraction failed", 
-        details: extractionError.message 
+      return res.status(500).json({
+        error: "PDF text extraction failed",
+        details: extractionError.message
       });
     }
 
@@ -166,16 +166,16 @@ router.post("/extract-text", async (req, res) => {
     };
     console.log('📄 Final response structure:', Object.keys(finalResponse));
     console.log('📄 === PDF TEXT PROCESSING DEBUG END ===');
-    
+
     return res.status(200).json(finalResponse);
   } catch (err) {
     console.error("❌ PDF Text Processing Error:", err.message);
     console.error("📄 Full error:", err);
     console.error("📄 Error stack:", err.stack);
     console.log('📄 === PDF TEXT PROCESSING ERROR END ===');
-    return res.status(500).json({ 
-      error: "PDF text extraction failed", 
-      details: err.message 
+    return res.status(500).json({
+      error: "PDF text extraction failed",
+      details: err.message
     });
   }
 });
@@ -188,25 +188,25 @@ router.post("/extract-text", async (req, res) => {
 router.get("/:documentId/text-results", async (req, res) => {
   try {
     const { documentId } = req.params;
-    
+
     console.log('📄 Getting text processing results for document:', documentId);
-    
+
     const client = await pool.connect();
     try {
       const result = await client.query(
-        `SELECT document_id, extracted_text, text_length, estimated_pages, pdf_title, pdf_author, pdf_creator, pdf_producer, pdf_creation_date, pdf_modification_date, processed_at
+        `SELECT document_id, extracted_text, text_length, estimated_pages, screenshot_path, pdf_title, pdf_author, pdf_creator, pdf_producer, pdf_creation_date, pdf_modification_date, processed_at
          FROM document_processing_results 
          WHERE document_id = $1`,
         [documentId]
       );
-      
+
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          error: 'Text processing results not found' 
+          error: 'Text processing results not found'
         });
       }
-      
+
       const results = result.rows[0];
       return res.status(200).json({
         success: true,
@@ -215,6 +215,7 @@ router.get("/:documentId/text-results", async (req, res) => {
           extracted_text: results.extracted_text,
           text_length: results.text_length,
           num_pages: results.estimated_pages,
+          screenshot_path: results.screenshot_path, // Added for vision analysis
           metadata: {
             title: results.pdf_title,
             author: results.pdf_author,
@@ -231,9 +232,9 @@ router.get("/:documentId/text-results", async (req, res) => {
     }
   } catch (err) {
     console.error("❌ Get Text Results Error:", err.message);
-    return res.status(500).json({ 
-      error: "Failed to get text processing results", 
-      details: err.message 
+    return res.status(500).json({
+      error: "Failed to get text processing results",
+      details: err.message
     });
   }
 });
