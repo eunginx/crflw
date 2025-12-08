@@ -342,13 +342,8 @@ export const useAIApplyManager = (userEmail?: string): UseAIApplyManagerReturn =
       return;
     }
 
-    // Verify the resume is active
-    const targetResume = resumes.find(r => r.id === targetId);
-    if (!targetResume || !targetResume.is_active) {
-      console.log('🔍 processResume early return: resume not active');
-      alert('Only active resumes can be processed. Please set this resume as active first.');
-      return;
-    }
+    // Backend will validate if resume is active, no need to check here
+    // This avoids race conditions with state updates
 
     try {
       console.log('🔍 processResume starting processing...');

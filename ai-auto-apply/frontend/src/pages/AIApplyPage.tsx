@@ -34,7 +34,7 @@ const AIApplyPage: React.FC = () => {
   const [analysisCompleted, setAnalysisCompleted] = useState(false); // Track if analysis was done for current resume
   const [resumeIntelligence, setResumeIntelligence] = useState<any>(null);
   const [selectedJob, setSelectedJob] = useState<any>(null);
-  
+
   // Track which resume ID the current data belongs to
   const [dataResumeId, setDataResumeId] = useState<string | null>(null);
   const [analysisResumeId, setAnalysisResumeId] = useState<string | null>(null); // Track analysis per resume
@@ -69,7 +69,7 @@ const AIApplyPage: React.FC = () => {
     console.log('🧠 Processing results available:', !!aiApplyManager.processingResults);
     console.log('🧠 Active resume:', unifiedResumeManager.activeResume);
     console.log('🧠 Current user email:', currentUser?.email);
-    
+
     if (!aiApplyManager.processingResults) {
       console.log('🧠 ERROR: No processing results available');
       setError('Please process your resume first before analyzing.');
@@ -88,29 +88,40 @@ const AIApplyPage: React.FC = () => {
       console.log('🧠 Starting enhanced AI analysis with image + text...');
       console.log('🧠 Resume ID to analyze:', unifiedResumeManager.activeResume?.id || '');
       console.log('🧠 User email for analysis:', currentUser?.email);
-      
+
       // Use the enhanced comprehensive analysis endpoint
-      const analysisResults = await aiApplyManager.startAIAnalysis(
+      const analysisResults: any = await aiApplyManager.startAIAnalysis(
         unifiedResumeManager.activeResume?.id || ''
       );
-      
+
+      console.log('🧠 === ANALYSIS RESULTS RECEIVED ===');
       console.log('🧠 AI analysis completed successfully');
-      console.log('🧠 Analysis results:', analysisResults);
-      
+      console.log('🧠 Analysis results type:', typeof analysisResults);
+      console.log('🧠 Analysis results keys:', analysisResults ? Object.keys(analysisResults) : []);
+      console.log('🧠 Full analysis results:', JSON.stringify(analysisResults, null, 2));
+
+      // Check data structure
+      if (analysisResults?.success && analysisResults?.data) {
+        console.log('🧠 Response has success/data wrapper');
+        console.log('🧠 Data keys:', Object.keys(analysisResults.data));
+        console.log('🧠 Data content:', analysisResults.data);
+      }
+
       setAiAnalysis(analysisResults);
       setAnalysisCompleted(true);
-      setAnalysisResumeId(unifiedResumeManager.activeResume?.id || null); // Track which resume was analyzed
-      console.log('🧠 Enhanced AI analysis completed:', analysisResults);
+      setAnalysisResumeId(unifiedResumeManager.activeResume?.id || null);
+      console.log('🧠 State updated - analysisCompleted: true');
+      console.log('🧠 === ANALYSIS RESULTS PROCESSING COMPLETE ===');
     } catch (error) {
       console.error('🧠 ERROR: Failed to run enhanced AI analysis:', error);
-      
+
       // Type-safe error handling
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       const errorStack = error instanceof Error ? error.stack : undefined;
       const axiosError = error as any;
       const errorResponse = axiosError?.response?.data;
       const errorStatus = axiosError?.response?.status;
-      
+
       console.error('🧠 Error details:', {
         message: errorMessage,
         stack: errorStack,
@@ -127,7 +138,7 @@ const AIApplyPage: React.FC = () => {
   // Clear analysis state when resume changes (only if different resume)
   useEffect(() => {
     const currentResumeId = unifiedResumeManager.activeResume?.id || null;
-    
+
     if (dataResumeId && currentResumeId && dataResumeId !== currentResumeId) {
       // Resume changed, clear all analysis data
       console.log('🔄 Resume changed from', dataResumeId, 'to', currentResumeId, '- clearing analysis data');
@@ -148,15 +159,17 @@ const AIApplyPage: React.FC = () => {
   useEffect(() => {
     if (!aiApplyManager.processingResults && dataResumeId) {
       console.log('🗑️ Active resume deleted, clearing all states');
+      // Clear all states in one batch to avoid triggering multiple re-renders
       setAiAnalysis(null);
       setAnalysisCompleted(false);
       setIsAnalyzing(false);
       setResumeIntelligence(null);
       setSelectedJob(null);
-      setDataResumeId(null);
       setAnalysisResumeId(null);
+      // Clear dataResumeId last to prevent infinite loop
+      setDataResumeId(null);
     }
-  }, [aiApplyManager.processingResults, dataResumeId]);
+  }, [aiApplyManager.processingResults]); // Only depend on processingResults, not dataResumeId
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -215,7 +228,7 @@ const AIApplyPage: React.FC = () => {
       )}
 
       {/* Onboarding Banner */}
-      <OnboardingBanner 
+      <OnboardingBanner
         isCompleted={onboardingCompleted}
       />
 
@@ -261,7 +274,7 @@ const AIApplyPage: React.FC = () => {
 
         {/* Resume Management Section */}
         {unifiedResumeManager.loading && <ResumeListSkeleton />}
-        
+
         {!unifiedResumeManager.loading && unifiedResumeManager.resumes.length > 0 && (
           <ResumeList
             resumes={unifiedResumeManager.resumes}
@@ -274,13 +287,13 @@ const AIApplyPage: React.FC = () => {
             processing={aiApplyManager.processing}
           />
         )}
-        
+
         {!unifiedResumeManager.loading && unifiedResumeManager.resumes.length === 0 && currentUser && (
           <div className="text-center py-8 text-gray-500">
             <p>No resumes found. Upload your first resume to get started!</p>
           </div>
         )}
-        
+
         {!currentUser && (
           <div className="text-center py-8 text-gray-500">
             <p>Please sign in to view and manage your resumes.</p>
@@ -325,7 +338,7 @@ const AIApplyPage: React.FC = () => {
 
       {aiApplyManager.processing && <ProcessingSkeleton />}
 
-{/* Processing Results Section - Only show if we have valid data */}
+      {/* Processing Results Section - Only show if we have valid data */}
       {aiApplyManager.processingResults && aiApplyManager.processingResults.extractedText && (
         <div className="space-y-8">
           {/* Extracted Text & Resume Preview - Only show if we have text content */}
@@ -475,55 +488,73 @@ const AIApplyPage: React.FC = () => {
           )}
 
           {/* AI Analysis Results - Only show after analysis is completed for current resume */}
-          {analysisCompleted && analysisResumeId === unifiedResumeManager.activeResume?.id && aiAnalysis && (
-            <>
-            {/* Aesthetic Score */}
-            {aiAnalysis?.aesthetic && (
-            <AestheticScoreCard
-              score={aiAnalysis.aesthetic.score}
-              strengths={aiAnalysis.aesthetic.strengths}
-              improvements={aiAnalysis.aesthetic.improvements}
-              assessment={aiAnalysis.aesthetic.assessment}
-            />
-          )}
+          {(() => {
+            const shouldShow = analysisCompleted && analysisResumeId === unifiedResumeManager.activeResume?.id && aiAnalysis;
+            console.log('🖼️ AI Analysis UI Render Check:', {
+              analysisCompleted,
+              analysisResumeId,
+              activeResumeId: unifiedResumeManager.activeResume?.id,
+              hasAiAnalysis: !!aiAnalysis,
+              shouldShow,
+              aiAnalysisKeys: aiAnalysis ? Object.keys(aiAnalysis) : []
+            });
 
-          {/* Skills */}
-          {aiAnalysis?.skills && (
-            <SkillsCard
-              skills={aiAnalysis.skills}
-            />
-          )}
+            if (!shouldShow) {
+              console.log('🖼️ AI Analysis UI NOT SHOWING - conditions not met');
+              return null;
+            }
 
-          {/* Recommendations */}
-          {aiAnalysis?.recommendations && (
-            (aiAnalysis.recommendations.recommendations?.length > 0 || 
-             aiAnalysis.recommendations.strengths?.length > 0 || 
-             aiAnalysis.recommendations.improvements?.length > 0) && (
-              <RecommendationsCard
-                recommendations={aiAnalysis.recommendations.recommendations || []}
-                strengths={aiAnalysis.recommendations.strengths || []}
-                improvements={aiAnalysis.recommendations.improvements || []}
-              />
-            )
-          )}
-            </>
-          )}
+            console.log('🖼️ AI Analysis UI SHOWING - rendering cards');
+            return (
+              <>
+                {/* Aesthetic Score */}
+                {aiAnalysis?.aesthetic && (
+                  <AestheticScoreCard
+                    score={aiAnalysis.aesthetic.score}
+                    strengths={aiAnalysis.aesthetic.strengths}
+                    improvements={aiAnalysis.aesthetic.improvements}
+                    assessment={aiAnalysis.aesthetic.assessment}
+                  />
+                )}
+
+                {/* Skills */}
+                {aiAnalysis?.skills && (
+                  <SkillsCard
+                    skills={aiAnalysis.skills}
+                  />
+                )}
+
+                {/* Recommendations */}
+                {aiAnalysis?.recommendations && (
+                  (aiAnalysis.recommendations.recommendations?.length > 0 ||
+                    aiAnalysis.recommendations.strengths?.length > 0 ||
+                    aiAnalysis.recommendations.improvements?.length > 0) && (
+                    <RecommendationsCard
+                      recommendations={aiAnalysis.recommendations.recommendations || []}
+                      strengths={aiAnalysis.recommendations.strengths || []}
+                      improvements={aiAnalysis.recommendations.improvements || []}
+                    />
+                  )
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
-{/* Development Debug Info */}
-{process.env.NODE_ENV === 'development' && (
-<div className="mt-6 p-4 bg-gray-100 rounded-lg">
-<h3 className="font-semibold mb-3 text-lg">🔍 Unified Resume Debugger</h3>
-          
-{/* User Info */}
-<div className="mb-4 p-3 bg-white rounded">
-<h4 className="font-medium mb-2 text-sm">👤 User Info</h4>
-<div className="text-xs space-y-1 font-mono">
-<p>Email: {currentUser?.email || 'Not logged in'}</p>
-<p>Loading: {currentUser ? 'No' : 'Yes'}</p>
-</div>
-</div>
+      {/* Development Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+          <h3 className="font-semibold mb-3 text-lg">🔍 Unified Resume Debugger</h3>
+
+          {/* User Info */}
+          <div className="mb-4 p-3 bg-white rounded">
+            <h4 className="font-medium mb-2 text-sm">👤 User Info</h4>
+            <div className="text-xs space-y-1 font-mono">
+              <p>Email: {currentUser?.email || 'Not logged in'}</p>
+              <p>Loading: {currentUser ? 'No' : 'Yes'}</p>
+            </div>
+          </div>
           <div className="mb-4 p-3 bg-white rounded">
             <h4 className="font-medium mb-2 text-sm">👤 User Info</h4>
             <div className="text-xs space-y-1 font-mono">
@@ -606,7 +637,7 @@ const AIApplyPage: React.FC = () => {
           <div className="mb-4 p-3 bg-white rounded">
             <h4 className="font-medium mb-2 text-sm">🧪 Debug Actions</h4>
             <div className="flex gap-2 flex-wrap">
-              <button 
+              <button
                 onClick={() => {
                   console.log('🔍 Unified Manager State:', unifiedResumeManager);
                   console.log('🔍 Base Manager State:', aiApplyManager);
@@ -616,7 +647,7 @@ const AIApplyPage: React.FC = () => {
               >
                 Log State to Console
               </button>
-              <button 
+              <button
                 onClick={() => {
                   aiApplyManager.loadResumes?.();
                 }}
@@ -624,7 +655,7 @@ const AIApplyPage: React.FC = () => {
               >
                 Reload Resumes
               </button>
-              <button 
+              <button
                 onClick={() => {
                   window.location.reload();
                 }}

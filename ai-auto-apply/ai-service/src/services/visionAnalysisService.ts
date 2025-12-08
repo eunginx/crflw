@@ -11,18 +11,22 @@ const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "https://ollama.com";
 const VISION_MODEL = process.env.VISION_MODEL || "qwen3-vl:235b";
 
 interface VisionAnalysisResult {
-    extractedSkills: string[];
-    suggestedKeywords: string[];
-    suggestedHeadline: string;
-    suggestedSummary: string;
-    experienceLevel: string;
-    industryInsights: {
-        averageSalary: {
-            min: number;
-            max: number;
-        };
-        topCompanies: string[];
-        demandLevel: string;
+    aesthetic: {
+        score: number;
+        strengths: string[];
+        improvements: string[];
+        assessment: string;
+    };
+    skills: {
+        technical: string[];
+        soft: string[];
+        certifications: string[];
+        tools: string[];
+    };
+    recommendations: {
+        recommendations: string[];
+        strengths: string[];
+        improvements: string[];
     };
 }
 
@@ -74,23 +78,30 @@ export async function analyzeResumeWithVision(
                 {
                     role: 'user',
                     content:
-                        'You are an expert resume analyst. Analyze the attached resume images and extracted text to provide comprehensive insights. ' +
-                        'Extract skills, suggest professional headline, write a compelling summary, determine experience level, and provide industry insights including salary range. ' +
-                        'Return ONLY a valid JSON object with the following structure:\n' +
-                        '{\n' +
-                        '  "extractedSkills": string[],\n' +
-                        '  "suggestedKeywords": string[],\n' +
-                        '  "suggestedHeadline": string,\n' +
-                        '  "suggestedSummary": string,\n' +
-                        '  "experienceLevel": "entry" | "mid" | "senior" | "lead",\n' +
-                        '  "industryInsights": {\n' +
-                        '    "averageSalary": { "min": number, "max": number },\n' +
-                        '    "topCompanies": string[],\n' +
-                        '    "demandLevel": "low" | "medium" | "high"\n' +
-                        '  }\n' +
-                        '}\n\n' +
-                        `Extracted Text:\n${extractedText}\n\n` +
-                        'Analyze both the visual layout from images and the extracted text to provide accurate insights.',
+                        'You are an expert ATS-grade resume analyst. Analyze the attached resume images and extracted text to provide comprehensive AI-powered insights. ' +
+                        'Evaluate the resume\'s visual aesthetic, categorize skills, and provide actionable recommendations. ' +
+                        'Return ONLY a valid JSON object with the following structure:\\n' +
+                        '{\\n' +
+                        '  \"aesthetic\": {\\n' +
+                        '    \"score\": number (0-100),\\n' +
+                        '    \"strengths\": string[] (visual/formatting strengths),\\n' +
+                        '    \"improvements\": string[] (visual/formatting suggestions),\\n' +
+                        '    \"assessment\": string (overall visual assessment)\\n' +
+                        '  },\\n' +
+                        '  \"skills\": {\\n' +
+                        '    \"technical\": string[] (programming, tools, technologies),\\n' +
+                        '    \"soft\": string[] (communication, leadership, etc),\\n' +
+                        '    \"certifications\": string[] (degrees, certs),\\n' +
+                        '    \"tools\": string[] (software, platforms)\\n' +
+                        '  },\\n' +
+                        '  \"recommendations\": {\\n' +
+                        '    \"recommendations\": string[] (specific actionable advice),\\n' +
+                        '    \"strengths\": string[] (what the resume does well),\\n' +
+                        '    \"improvements\": string[] (areas to enhance)\\n' +
+                        '  }\\n' +
+                        '}\\n\\n' +
+                        `Extracted Text:\\n${extractedText}\\n\\n` +
+                        'Analyze both the visual layout from images and the extracted text. Be specific and actionable in your recommendations.',
                     images: images,
                 },
             ],
@@ -170,30 +181,46 @@ function generateFallbackAnalysis(extractedText: string): VisionAnalysisResult {
     console.log('👁️ Generating fallback analysis from extracted text');
 
     // Simple text-based skill extraction
-    const commonSkills = [
-        'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java',
-        'AWS', 'Docker', 'Kubernetes', 'Git', 'SQL', 'MongoDB',
-        'Leadership', 'Communication', 'Problem Solving', 'Team Management'
-    ];
+    const technicalSkills = ['JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java', 'AWS', 'Docker', 'Kubernetes', 'Git', 'SQL', 'MongoDB'];
+    const softSkills = ['Leadership', 'Communication', 'Problem Solving', 'Team Management', 'Project Management'];
 
-    const extractedSkills = commonSkills.filter(skill =>
+    const foundTechnical = technicalSkills.filter(skill =>
+        extractedText.toLowerCase().includes(skill.toLowerCase())
+    );
+
+    const foundSoft = softSkills.filter(skill =>
         extractedText.toLowerCase().includes(skill.toLowerCase())
     );
 
     return {
-        extractedSkills: extractedSkills.length > 0 ? extractedSkills : ['Professional Experience', 'Technical Skills'],
-        suggestedKeywords: extractedSkills.slice(0, 5),
-        suggestedHeadline: 'Experienced Professional | Technology & Innovation',
-        suggestedSummary: 'Results-driven professional with proven track record in delivering high-impact solutions. Strong technical background with excellent communication and leadership skills.',
-        experienceLevel: 'mid',
-        industryInsights: {
-            averageSalary: {
-                min: 80000,
-                max: 120000,
-            },
-            topCompanies: ['Google', 'Microsoft', 'Amazon', 'Meta', 'Apple'],
-            demandLevel: 'high',
+        aesthetic: {
+            score: 70,
+            strengths: ['Clean layout', 'Professional formatting', 'Good use of whitespace'],
+            improvements: ['Consider adding more visual hierarchy', 'Use consistent font sizes', 'Add section dividers'],
+            assessment: 'The resume has a professional appearance with room for visual enhancements to improve ATS compatibility and readability.'
         },
+        skills: {
+            technical: foundTechnical.length > 0 ? foundTechnical : ['Professional Experience'],
+            soft: foundSoft.length > 0 ? foundSoft : ['Communication', 'Teamwork'],
+            certifications: [],
+            tools: []
+        },
+        recommendations: {
+            recommendations: [
+                'Add quantifiable achievements with metrics',
+                'Include relevant keywords for ATS optimization',
+                'Ensure consistent formatting throughout'
+            ],
+            strengths: [
+                'Clear professional experience section',
+                'Well-organized content structure'
+            ],
+            improvements: [
+                'Add more specific technical skills',
+                'Include measurable results and impact',
+                'Optimize for applicant tracking systems'
+            ]
+        }
     };
 }
 
