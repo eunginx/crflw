@@ -126,37 +126,45 @@ export async function analyzeResumeWithVision(
             payload,
             {
                 headers,
-                timeout: 180000, // 3 minutes timeout for vision analysis
+                timeout: 600000, // 10 minutes timeout for vision analysis
             }
         );
 
         console.log('👁️ API response received:', response.status, response.statusText);
 
-        const data = response.data;
-        const raw = data?.message?.content || '';
+        // === RESPONSE PARSING ===
+        const rawOutput = response.data?.message?.content || '';
+        console.log('👁️ Raw model output length:', rawOutput.length);
+        console.log('👁️ Raw model output (first 500 chars):', rawOutput.substring(0, 500));
 
-        console.log('👁️ Raw model output length:', raw.length);
-        console.log('👁️ Raw model output (first 500 chars):', raw.substring(0, 500));
-
-        // === CLEAN JSON ===
-        const cleaned = raw
-            .replace(/```json/g, '')
-            .replace(/```/g, '')
-            .trim();
+        // Try to extract JSON from the response
+        let analysisResult: VisionAnalysisResult;
 
         try {
-            const parsed = JSON.parse(cleaned) as VisionAnalysisResult;
-            console.log('✅ Vision analysis completed successfully');
-            console.log('👁️ === VISION ANALYSIS END ===');
-            return parsed;
+            // Try to parse the entire response as JSON
+            analysisResult = JSON.parse(rawOutput);
         } catch (parseError) {
-            console.error('⚠️ Failed to parse JSON from vision model:', parseError);
-            console.error('⚠️ Raw output:', raw);
-            console.error('⚠️ Cleaned output:', cleaned);
+            console.log('⚠️  Failed to parse entire response as JSON, trying to extract JSON block');
 
-            // Return fallback analysis
-            return generateFallbackAnalysis(extractedText);
+            // Try to extract JSON from markdown code blocks
+            const jsonMatch = rawOutput.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+            if (jsonMatch) {
+                analysisResult = JSON.parse(jsonMatch[1]);
+            } else {
+                // Try to find JSON object in the response
+                const objectMatch = rawOutput.match(/\{[\s\S]*\}/);
+                if (objectMatch) {
+                    analysisResult = JSON.parse(objectMatch[0]);
+                } else {
+                    throw new Error('Could not extract JSON from model response');
+                }
+            }
         }
+
+        console.log('✅ Vision analysis completed successfully');
+        console.log('👁️ === VISION ANALYSIS END ===');
+
+        return analysisResult;
     } catch (error) {
         console.error('❌ Error during vision analysis:', error);
         if (axios.isAxiosError(error)) {

@@ -84,6 +84,7 @@ const AIApplyPage: React.FC = () => {
     });
 
     setIsAnalyzing(true);
+    setError(''); // Clear any previous error messages
     try {
       console.log('🧠 Starting enhanced AI analysis with image + text...');
       console.log('🧠 Resume ID to analyze:', unifiedResumeManager.activeResume?.id || '');

@@ -140,7 +140,7 @@ class AIApplyService {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 30000, // 30 seconds timeout for file upload
+          timeout: 600000, // 10 minutes timeout for file upload
         }
       );
 
@@ -285,15 +285,15 @@ class AIApplyService {
   async deleteResume(resumeId: string, userEmail: string): Promise<{ success: boolean; message: string; hardDelete: boolean }> {
     try {
       console.log('🗑️ HARD DELETING resume:', { resumeId, userEmail });
-      
+
       const response = await axios.delete(
         `${API_BASE_URL}/api/ai-apply/resumes/${resumeId}`,
-        { 
+        {
           data: { userEmail, hardDelete: true }, // Always hard delete
           timeout: 60000 // 60 second timeout to prevent hanging during debugging
         }
       );
-      
+
       console.log('🗑️ Resume hard delete successful:', response.data);
       return response.data;
     } catch (error) {
@@ -339,28 +339,28 @@ class AIApplyService {
    * Get screenshot URL
    */
   getScreenshotUrl(screenshotPath: string): string {
-    console.log('🖼️ getScreenshotUrl DEBUG - Input:', { 
-      screenshotPath, 
+    console.log('🖼️ getScreenshotUrl DEBUG - Input:', {
+      screenshotPath,
       type: typeof screenshotPath,
       length: screenshotPath?.length,
       apiBaseUrl: API_BASE_URL
     });
-    
+
     if (!screenshotPath) {
       console.log('🖼️ getScreenshotUrl DEBUG - No screenshotPath provided, returning empty string');
       return '';
     }
-    
+
     // Extract filename from path
     const filename = screenshotPath.split('/').pop();
     const url = `${API_BASE_URL}/api/documents/screenshots/${filename}`;
-    
+
     console.log('🖼️ getScreenshotUrl DEBUG - URL construction:', {
       originalPath: screenshotPath,
       extractedFilename: filename,
       finalUrl: url
     });
-    
+
     return url;
   }
 
@@ -480,19 +480,19 @@ class AIApplyService {
     console.log('🧠 startAIAnalysis called with documentId:', documentId);
     console.log('🧠 API_BASE_URL:', API_BASE_URL);
     console.log('🧠 Full endpoint URL:', `${API_BASE_URL}/api/ai/analyze-resume`);
-    
+
     try {
       console.log('🧠 Starting enhanced comprehensive AI analysis for document:', documentId);
-      
+
       // Step 1: Ensure text extraction is complete
       console.log('🧠 Step 1: Checking if text extraction is complete...');
       const textResultsResponse = await axios.get(
         `${API_BASE_URL}/api/pdf-processing/${documentId}/text-results`
       );
-      
+
       if (!textResultsResponse.data?.success || !textResultsResponse.data?.data?.extracted_text) {
         console.log('🧠 Text not extracted yet, starting text extraction...');
-        
+
         // Extract text first
         const extractionResponse = await axios.post(
           `${API_BASE_URL}/api/pdf-processing/extract-text`,
@@ -504,19 +504,19 @@ class AIApplyService {
             }
           }
         );
-        
+
         console.log('🧠 Text extraction completed:', extractionResponse.data);
       } else {
         console.log('🧠 Text extraction already complete, using existing results');
       }
-      
+
       // Step 2: Call AI analysis with pre-extracted text
       console.log('🧠 Step 2: Starting AI analysis...');
       const response = await axios.post(
         `${API_BASE_URL}/api/ai/analyze-resume`,
         { documentId },
         {
-          timeout: 120000, // 2 minute timeout for AI analysis
+          timeout: 600000, // 10 minutes timeout for AI analysis
           headers: {
             'Content-Type': 'application/json'
           }
@@ -542,7 +542,7 @@ class AIApplyService {
     } catch (error) {
       console.error('🧠 === AI ANALYSIS SERVICE ERROR ===');
       console.error('🧠 Failed to start enhanced AI analysis:', error);
-      
+
       if (axios.isAxiosError(error)) {
         console.error('🧠 Axios Error Details:');
         console.error('🧠 Message:', error.message);
@@ -557,7 +557,7 @@ class AIApplyService {
           headers: error.config?.headers,
           timeout: error.config?.timeout
         });
-        
+
         // Check for specific error types
         if (error.code === 'ECONNREFUSED') {
           console.error('🧠 CONNECTION REFUSED: Backend service may be down');
@@ -568,12 +568,12 @@ class AIApplyService {
         } else if (error.response?.status === 500) {
           console.error('🧠 SERVER ERROR: Backend analysis failed');
         }
-        
+
         const errorMessage = error.response?.data?.error || error.message || 'Failed to start enhanced AI analysis';
         console.error('🧠 Final error message:', errorMessage);
         throw new Error(errorMessage);
       }
-      
+
       console.error('🧠 Non-Axios error:', error);
       throw new Error('Network error while starting enhanced AI analysis');
     }
@@ -647,7 +647,7 @@ class AIApplyService {
       console.log('🎨 CALLING AI SERVICE FOR AESTHETIC SCORE');
       console.log('AI Service URL:', AI_SERVICE_BASE_URL);
       console.log('Resume Text Length:', resumeText?.length || 0);
-      
+
       const response = await axios.post(
         `${AI_SERVICE_BASE_URL}/api/ai/analyze-aesthetic-score`,
         {
@@ -655,7 +655,7 @@ class AIApplyService {
           resumeContent
         }
       );
-      
+
       console.log('🎨 AI SERVICE RESPONSE:', response.data);
       return response.data;
     } catch (error) {
@@ -684,14 +684,14 @@ class AIApplyService {
       console.log('🔧 CALLING AI SERVICE FOR SKILLS ANALYSIS');
       console.log('AI Service URL:', AI_SERVICE_BASE_URL);
       console.log('Resume Text Length:', resumeText?.length || 0);
-      
+
       const response = await axios.post(
         `${AI_SERVICE_BASE_URL}/api/ai/analyze-skills`,
         {
           resumeText
         }
       );
-      
+
       console.log('🔧 AI SERVICE RESPONSE:', response.data);
       return response.data;
     } catch (error) {
@@ -722,7 +722,7 @@ class AIApplyService {
       console.log('Resume Text Length:', resumeText?.length || 0);
       console.log('Resume Sections:', resumeSections);
       console.log('Current Skills:', currentSkills);
-      
+
       const response = await axios.post(
         `${AI_SERVICE_BASE_URL}/api/ai/generate-recommendations`,
         {
@@ -731,7 +731,7 @@ class AIApplyService {
           currentSkills
         }
       );
-      
+
       console.log('💡 AI SERVICE RESPONSE:', response.data);
       return response.data;
     } catch (error) {

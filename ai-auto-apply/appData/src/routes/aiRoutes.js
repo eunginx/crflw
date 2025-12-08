@@ -43,13 +43,13 @@ router.post("/analyze-resume", async (req, res) => {
     const aiServiceEndpoint = `${AI_SERVICE_URL}/api/ai/analyze-resume`;
 
     console.log('🧠 AI Service URL:', aiServiceEndpoint);
-    console.log('🧠 Forwarding request to AI service with 3-minute timeout...');
+    console.log('🧠 Forwarding request to AI service with 10-minute timeout...');
 
     const aiResponse = await axios.post(
       aiServiceEndpoint,
       { documentId },
       {
-        timeout: 180000, // 3 minutes for vision processing
+        timeout: 600000, // 10 minutes for vision processing
         headers: {
           'Content-Type': 'application/json'
         }
