@@ -7,7 +7,8 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
-const pdfRoutes_1 = __importDefault(require("./routes/pdfRoutes"));
+const coverLetterRoutes_1 = __importDefault(require("./routes/coverLetterRoutes"));
+// import pdfRoutes from './routes/pdfRoutes'; // Temporarily disabled to fix DOMMatrix issue
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT ?? 4001);
@@ -48,7 +49,8 @@ app.get('/health', (_req, res) => {
     });
 });
 app.use('/api/ai', aiRoutes_1.default);
-app.use('/api/pdf', pdfRoutes_1.default);
+app.use('/api/cover-letter', coverLetterRoutes_1.default);
+// app.use('/api/pdf', pdfRoutes); // Temporarily disabled to fix DOMMatrix issue
 app.use((err, _req, res, _next) => {
     console.error('💥 [EXTREME][ERROR]', {
         message: err.message,
@@ -77,6 +79,7 @@ app.listen(PORT, () => {
         ollamaApiKey: maskedApiKey,
         services: {
             ai: '/api/ai',
+            'cover-letter': '/api/cover-letter',
             pdf: '/api/pdf'
         }
     });

@@ -23,16 +23,70 @@ const router = Router();
 
 router.post('/analyze-resume', async (req, res) => {
   try {
-    const payload: ResumeAnalysisRequest = req.body;
-    if (!payload?.resumeText) {
-      return res.status(400).json({ error: 'resumeText is required' });
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({ error: 'documentId is required' });
     }
 
-    const analysis = await analyzeResume(payload);
-    res.json(analysis);
+    console.log('🧠 Vision Analysis Request - Document ID:', documentId);
+
+    // Import vision analysis service
+    const { analyzeResumeWithVision } = await import('../services/visionAnalysisService');
+
+    // Fetch screenshot paths and extracted text from PDF processing service
+    const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL || 'http://localhost:8000';
+
+    // Get text results
+    const axios = (await import('axios')).default;
+    const textResponse = await axios.get(
+      `${PDF_SERVICE_URL}/api/pdf-processing/${documentId}/text-results`,
+      { timeout: 30000 }
+    );
+
+    if (!textResponse.data?.success || !textResponse.data?.data?.extracted_text) {
+      return res.status(400).json({
+        error: 'Resume text not extracted yet. Please process the resume first.'
+      });
+    }
+
+    const extractedText = textResponse.data.data.extracted_text;
+    const screenshotPathsJson = textResponse.data.data.screenshot_path;
+
+    // Parse screenshot paths from JSON string
+    let screenshotPaths: string[] = [];
+    if (screenshotPathsJson) {
+      try {
+        screenshotPaths = JSON.parse(screenshotPathsJson);
+      } catch (error) {
+        console.warn('Failed to parse screenshot paths:', error);
+      }
+    }
+
+    console.log('🧠 Extracted text length:', extractedText.length);
+    console.log('🧠 Screenshot paths:', screenshotPaths);
+
+    // Perform vision analysis
+    const analysis = await analyzeResumeWithVision(screenshotPaths, extractedText);
+
+    res.json({
+      success: true,
+      data: analysis
+    });
   } catch (error) {
-    console.error('Error analyzing resume', error);
-    res.status(500).json({ error: 'Failed to analyze resume' });
+    console.error('Error analyzing resume with vision:', error);
+
+    if ((error as any).code === 'ECONNABORTED') {
+      return res.status(500).json({
+        error: 'Resume analysis failed',
+        details: 'timeout of 60000ms exceeded'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to analyze resume',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -138,7 +192,7 @@ router.post('/generate-recommendations', async (req, res) => {
 router.post('/ollama/generate', async (req, res) => {
   try {
     const { model, prompt, stream } = req.body;
-    
+
     if (!prompt) {
       return res.status(400).json({ error: 'prompt is required' });
     }
@@ -151,12 +205,12 @@ router.post('/ollama/generate', async (req, res) => {
 
     // Import the callModel function from ollamaService
     // callModel is now imported directly at the top of the file
-    
+
     if (stream) {
       // For streaming, we'll implement a simple chunked response
       // Note: This is a basic implementation - you might want to enhance this based on your streaming needs
       const response = await callModel(prompt);
-      
+
       // Send the response in chunks
       const chunkSize = 100;
       for (let i = 0; i < response.length; i += chunkSize) {
@@ -165,7 +219,7 @@ router.post('/ollama/generate', async (req, res) => {
         // Small delay to simulate streaming
         await new Promise(resolve => setTimeout(resolve, 50));
       }
-      
+
       res.end();
     } else {
       // Non-streaming response
