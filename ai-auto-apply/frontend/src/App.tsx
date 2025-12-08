@@ -22,6 +22,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import EmailSettingsPage from './pages/EmailSettingsPage';
 import EmailIntegrationTest from './pages/EmailIntegrationTest';
 import AIApplyPage from './pages/AIApplyPage';
+import AutoApplyHistoryPage from './pages/AutoApplyHistoryPage';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
                         <Route path="jobs" element={<JobsPage />} />
                         <Route path="applications" element={<ApplicationsPage />} />
                         <Route path="ai-apply" element={<AIApplyPage />} />
+                        <Route path="auto-apply-history" element={<AutoApplyHistoryPage />} />
                         <Route path="profile" element={<ProfilePage />} />
                         <Route path="settings" element={<SettingsPage />} />
                         {/* Email-based routes */}
