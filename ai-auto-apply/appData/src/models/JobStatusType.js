@@ -12,7 +12,7 @@ class JobStatusType {
     let paramIndex = 1;
     
     if (!includeHidden) {
-      sql += ` AND hidden = FALSE`;
+      sql += ` AND is_hidden = FALSE`;
     }
     
     if (category) {
@@ -117,11 +117,11 @@ class JobStatusType {
   static async getEnhancedStatuses(options = {}) {
     const { includeHidden = false } = options;
     
-    let sql = 'SELECT * FROM job_statuses_enhanced';
+    let sql = 'SELECT * FROM job_status_types';
     const values = [];
     
     if (!includeHidden) {
-      sql += ' WHERE hidden = false';
+      sql += ' WHERE is_hidden = false';
     }
     
     sql += ' ORDER BY sort_order ASC';
@@ -144,7 +144,7 @@ class JobStatusType {
           ) ORDER BY sort_order
         ) as statuses
       FROM job_status_types 
-      WHERE hidden = FALSE AND group_label IS NOT NULL
+      WHERE is_hidden = FALSE AND group_label IS NOT NULL
       GROUP BY group_label
       ORDER BY group_label
     `;
@@ -166,7 +166,7 @@ class JobStatusType {
           ) ORDER BY sort_order
         ) as statuses
       FROM job_status_types 
-      WHERE hidden = FALSE
+      WHERE is_hidden = FALSE
       GROUP BY category
       ORDER BY category
     `;
