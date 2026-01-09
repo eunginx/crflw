@@ -557,17 +557,17 @@ const AIApplyPage: React.FC = () => {
                 )}
 
                 {/* Skills */}
-                {aiAnalysis.skills && (
+                {aiAnalysis.data.skills && (
                   <div style={{border: '2px solid #8B5CF6', padding: '0.5rem'}}>
                     <h4 className="text-md font-medium text-gray-800 mb-2">🛠️ Skills Component</h4>
                     <SkillsCard
-                      skills={aiAnalysis.skills}
+                      skills={aiAnalysis.data.skills}
                     />
                   </div>
                 )}
 
                 {/* Recommendations */}
-                {aiAnalysis.recommendations && (
+                {aiAnalysis.data.recommendations && (
                   (aiAnalysis.recommendations.recommendations?.length > 0 ||
                     aiAnalysis.recommendations.strengths?.length > 0 ||
                     aiAnalysis.recommendations.improvements?.length > 0) && (
