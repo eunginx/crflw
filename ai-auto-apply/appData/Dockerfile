@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -11,8 +11,8 @@ RUN npm ci --only=production
 # Copy source code
 COPY src/ ./src/
 
-# Create resumes directory for file uploads
-RUN mkdir -p /app/resumes
+# Create necessary directories
+RUN mkdir -p /app/uploads/resumes /app/uploads/documents /app/logs
 
 # Expose port
 EXPOSE 6000

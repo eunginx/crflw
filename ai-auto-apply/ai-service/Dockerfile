@@ -3,7 +3,7 @@
 #############################
 # Build Stage
 #############################
-FROM node:18-alpine as build
+FROM node:20-alpine as build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npm run build
 #############################
 # Production Stage
 #############################
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 

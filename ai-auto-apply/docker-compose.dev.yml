@@ -3,6 +3,7 @@ services:
     build: 
       context: ./frontend
       dockerfile: Dockerfile
+      target: development
     ports:
       - "3000:3000"
     depends_on:
@@ -10,10 +11,15 @@ services:
       - ai-service
     networks:
       - ai-network
-    restart: unless-stopped
     environment:
-      - REACT_APP_ENV=docker
-      - REACT_APP_BACKEND_URL=http://appdata:6000/api
+      - REACT_APP_API_URL=http://localhost:6001/api
+      - REACT_APP_AI_SERVICE_URL=http://localhost:8000
+      - FAST_REFRESH=true
+      - INLINE_RUNTIME_CHUNK=false
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
 
   appdata:
     build: 
@@ -31,7 +37,7 @@ services:
       - PORT=6000
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aiautoapply
     env_file:
-      - ./appData/.env.docker
+      - ./appData/.env
     networks:
       - ai-network
     depends_on:

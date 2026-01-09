@@ -1,10 +1,16 @@
 // Programmatic API base URL configuration with environment detection
 const getApiBaseUrl = () => {
   const env = process.env.REACT_APP_ENV || 'local';
-  const backendPort = process.env.REACT_APP_BACKEND_PORT || '8000'; // Changed from 6001 to 8000
+  const backendUrl = process.env.REACT_APP_BACKEND_URL;
+  
+  if (env === 'docker' && backendUrl) {
+    return backendUrl; // Use Docker network URL when provided
+  }
+  
+  const backendPort = process.env.REACT_APP_BACKEND_PORT || '6001'; // Updated to match appdata service
   
   if (env === 'docker') {
-    return `http://localhost:8100/api`;
+    return `http://appdata:6000/api`; // Use Docker service name
   }
   
   return `http://localhost:${backendPort}/api`;

@@ -22,6 +22,7 @@ import emailApplicationsRoutes from './routes/applications-email.js';
 import emailUserDataRoutes from './routes/email-user-data.js';
 import jobStatusesRoutes from './routes/job-statuses.js';
 import userRoutes from './routes/userRoutes.js';
+import migrationRoutes from './routes/migrationRoutes.js';
 
 const app = express();
 
@@ -97,11 +98,68 @@ console.log('[DEBUG] Job statuses routes registered');
 app.use('/api/user', userRoutes);
 console.log('[DEBUG] Unified user routes registered');
 
+app.use('/api/migration', migrationRoutes);
+console.log('[DEBUG] Migration routes registered');
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 App Data API server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API base URL: http://localhost:${PORT}/api`);
+});
+
+// Direct migration endpoint
+app.post('/api/migration/fix-applications-tables', async (req, res) => {
+  try {
+    console.log('🔧 Running applications table migration via API...');
+    
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    
+    // Read the migration SQL file
+    const migrationPath = path.join(__dirname, 'migrations/015_fix_applications_tables.sql');
+    const migrationSQL = await fs.readFile(migrationPath, 'utf8');
+    
+    // Execute the migration using the existing query function
+    const { query } = await import('./db.js');
+    await query(migrationSQL);
+    
+    console.log('✅ Migration completed successfully!');
+    
+    // Verify tables were created
+    const tables = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name LIKE '%email%'
+      ORDER BY table_name
+    `);
+    
+    // Test the applications endpoint
+    const testApps = await query(`
+      SELECT * FROM job_applications_email 
+      WHERE email = 'test@example.com'
+      ORDER BY created_at DESC
+    `);
+    
+    res.json({
+      success: true,
+      message: 'Applications tables migration completed successfully',
+      tablesCreated: tables.rows,
+      sampleApplications: testApps.rows
+    });
+    
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 export default app;
